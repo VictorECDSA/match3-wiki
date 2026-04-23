@@ -60,134 +60,45 @@ FAILED
 
 ---
 
-## 源码
+## 核心实现
+
+**文件**：`app/workers/tasks/ingest_task.py`
 
 ```python
-# app/workers/tasks/ingest_task.py
-from __future__ import annotations
-from celery import chain
-from app.workers.celery_app import celery_app
-from app.workers.worker_runtime import get_runtime
-from app.common.exceptions import Match3Exception
-from app.storage.repositories.raw_file_repo import RawFileRepository
-from app.storage.repositories.text_chunk_repo import TextChunkRepository
-from app.storage.entities.raw_file import RawFileStatus
-from app.storage.entities.text_chunk import TextChunk
-from app.ingest.file_parser import parse_file
-from app.ingest.chunker import chunk_text
-from app.common.constants import constants
-import app.common.constants.codes as codes
-from uuid import uuid4
-from datetime import datetime, timezone
-
-
-@celery_app.task(
-    name="app.workers.tasks.ingest_task.ingest_file",
-    bind=True,
-    max_retries=3,
-    default_retry_delay=10,
-)
+@celery_app.task(name="…ingest_file", bind=True, max_retries=3, default_retry_delay=10)
 def ingest_file(self, raw_file_id: str) -> str:
-    """
-    将原始文件解析为 PostgreSQL 中的 TextChunk 记录。
 
-    推进 t_raw_files.f_status：
-      PENDING -> PROCESSING -> DONE   （成功）
-      PROCESSING -> FAILED            （出错）
-
-    成功后，为同一 raw_file_id 链式触发 embed_chunks -> extract_graph。
-    返回 raw_file_id 供下游任务使用。
-    """
-    rt = get_runtime()
-    raw_file_repo = RawFileRepository(rt.db_engine)
-    chunk_repo = TextChunkRepository(rt.db_engine)
-
-    raw_file = raw_file_repo.find_by_id(raw_file_id)
-    if not raw_file:
-        raise Match3Exception.of_code(
-            codes.RAW_FILE_NOT_FOUND,
-            "raw file not found",
-        ).ctx(raw_file_id=raw_file_id)
-
-    # 推进到 PROCESSING，防止并发重试重复执行同一文件
-    raw_file.status = RawFileStatus.PROCESSING
+    raw_file = raw_file_repo.find_by_id(raw_file_id)   # raises RAW_FILE_NOT_FOUND if missing
+    raw_file.status = PROCESSING
     raw_file_repo.update(raw_file)
 
     try:
-        # 步骤 1：从 MinIO 下载
-        try:
-            file_bytes = rt.storage.get_object(raw_file.object_key)
-        except Exception as e:
-            raise Match3Exception.of("failed to get_object").ctx(
-                object_key=raw_file.object_key
-            ).as_ex(e)
+        file_bytes = rt.storage.get_object(raw_file.object_key)
+        pages      = parse_file(file_bytes, raw_file.filename, raw_file.file_type, rt.llm, ...)
 
-        # 步骤 2：解析为页面列表
-        try:
-            pages = parse_file(
-                file_bytes=file_bytes,
-                filename=raw_file.filename,
-                file_type=raw_file.file_type,
-                llm=rt.llm,
-                image_embedder=rt.image_embedder,
-                transcriber=rt.transcriber,
-            )
-        except Exception as e:
-            raise Match3Exception.of("failed to parse_file").ctx(
-                raw_file_id=raw_file_id,
-                file_type=raw_file.file_type,
-            ).as_ex(e)
-
-        # 步骤 3：对每页文本进行分块
-        all_chunks: list[TextChunk] = []
+        all_chunks = []
         for page_idx, page_text in enumerate(pages):
-            segments = chunk_text(page_text, chunk_size=512, overlap=64)
-            for seg_idx, segment in enumerate(segments):
-                chunk = TextChunk(
-                    id=str(uuid4()),
-                    workspace_id=raw_file.workspace_id,
-                    raw_file_id=raw_file_id,
-                    parent_chunk_id=None,
-                    chunk_index=page_idx * 1000 + seg_idx,
-                    chunk_type=constants.CHUNK_TYPE_TEXT,
-                    content=segment,
-                    token_count=len(segment.split()),
-                    topic_tags=list(raw_file.tags),
-                    created_at=datetime.now(timezone.utc),
-                )
-                all_chunks.append(chunk)
+            for seg_idx, segment in enumerate(chunk_text(page_text, chunk_size=512, overlap=64)):
+                all_chunks.append(TextChunk(
+                    id=str(uuid4()), workspace_id=raw_file.workspace_id,
+                    raw_file_id=raw_file_id, chunk_index=page_idx * 1000 + seg_idx,
+                    chunk_type=CHUNK_TYPE_TEXT, content=segment,
+                    topic_tags=list(raw_file.tags), ...
+                ))
 
-        # 步骤 4：持久化到 PostgreSQL
         chunk_repo.bulk_insert(all_chunks)
-
-        # 步骤 5：推进状态到 DONE
-        raw_file.status = RawFileStatus.DONE
+        raw_file.status = DONE
         raw_file.chunk_count = len(all_chunks)
         raw_file_repo.update(raw_file)
 
-    except Match3Exception as exc:
-        raw_file.status = RawFileStatus.FAILED
-        raw_file.error = str(exc)
+    except (Match3Exception, Exception) as exc:
+        raw_file.status = FAILED
+        raw_file.error  = str(exc)
         raw_file_repo.update(raw_file)
-        raise
+        raise self.retry(exc=exc)   # MaxRetriesExceededError propagates on final attempt
 
-    except Exception as exc:
-        raw_file.status = RawFileStatus.FAILED
-        raw_file.error = str(exc)
-        raw_file_repo.update(raw_file)
-        try:
-            raise self.retry(exc=exc)
-        except self.MaxRetriesExceededError:
-            raise
-
-    # 步骤 6：链式触发 embed + graph 任务
-    from app.workers.tasks.embed_task import embed_chunks
-    from app.workers.tasks.graph_task import extract_graph
-
-    chain(
-        embed_chunks.si(raw_file_id),
-        extract_graph.si(raw_file_id),
-    ).delay()
-
+    chain(embed_chunks.si(raw_file_id), extract_graph.si(raw_file_id)).delay()
     return raw_file_id
 ```
+
+> `parse_file()` 根据 `file_type` 分发：PDF → PyMuPDF，图片 → CLIP caption，音视频 → 转录器，文本 → 直接读取。

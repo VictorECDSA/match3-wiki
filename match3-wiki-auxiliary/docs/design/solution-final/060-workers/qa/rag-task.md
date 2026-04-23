@@ -67,90 +67,36 @@ launch_multi_agent_chord(query, workspace_id, domains)
 ## 调用方式
 
 ```python
-from app.workers.tasks.rag_task import launch_multi_agent_chord
-
 task_id = launch_multi_agent_chord(
     query="Royal Match 的核心留存机制是什么？",
     workspace_id="ws_abc123",
     domains=["entities", "market", "mechanics", "growth"],
 )
-# 返回 Celery task_id，调用方通过 GET /api/v1/qa/tasks/{task_id} 轮询结果
+# returns Celery task_id; caller polls GET /api/v1/qa/tasks/{task_id}
 ```
 
 ---
 
-## 源码
+## 核心实现
+
+**文件**：`app/workers/tasks/rag_task.py`
 
 ```python
-# app/workers/tasks/rag_task.py
-from __future__ import annotations
-from celery import chord
-from app.workers.celery_app import celery_app
-from app.workers.worker_runtime import get_runtime
-from app.common.exceptions import Match3Exception
-from app.services.rag.multi_agent import _run_domain_agent, _verify_answers
-
-
-@celery_app.task(
-    name="app.workers.tasks.rag_task.domain_agent_task",
-    bind=True,
-    max_retries=2,
-    time_limit=60,
-)
+@celery_app.task(name="…domain_agent_task", bind=True, max_retries=2, time_limit=60)
 def domain_agent_task(self, domain: str, query: str, workspace_id: str) -> dict:
-    """
-    运行单个领域子智能体并以可 JSON 序列化的字典形式返回答案。
-    作为多智能体 chord header 的一部分，所有领域并行执行。
-    """
-    rt = get_runtime()
-    try:
-        answer = _run_domain_agent(rt, domain, query, workspace_id)
-    except Exception as e:
-        raise Match3Exception.of("failed to _run_domain_agent").ctx(
-            domain=domain,
-            workspace_id=workspace_id,
-        ).as_ex(e)
+    answer = _run_domain_agent(rt, domain, query, workspace_id)
     return {"domain": domain, "answer": answer}
 
 
-@celery_app.task(
-    name="app.workers.tasks.rag_task.multi_agent_verify_task",
-    bind=True,
-    max_retries=1,
-    time_limit=120,
-)
-def multi_agent_verify_task(
-    self, domain_results: list[dict], query: str, workspace_id: str
-) -> str:
-    """
-    对所有领域答案进行交叉验证并合成最终响应（chord callback）。
-    Celery chord 会自动将 domain_results 作为第一个参数传入。
-    """
-    rt = get_runtime()
-    try:
-        final_answer = _verify_answers(rt, domain_results, query)
-    except Exception as e:
-        raise Match3Exception.of("failed to _verify_answers").ctx(
-            workspace_id=workspace_id,
-        ).as_ex(e)
-    return final_answer
+@celery_app.task(name="…multi_agent_verify_task", bind=True, max_retries=1, time_limit=120)
+def multi_agent_verify_task(self, domain_results: list[dict], query: str, workspace_id: str) -> str:
+    # domain_results is auto-injected by Celery chord as first argument
+    return _verify_answers(rt, domain_results, query)
 
 
-def launch_multi_agent_chord(
-    query: str,
-    workspace_id: str,
-    domains: list[str] = ("entities", "market", "mechanics", "growth"),
-) -> str:
-    """
-    通过 Celery chord 并行启动所有领域子智能体。
-    返回验证回调任务的 Celery task ID。
-    调用方通过 GET /api/v1/qa/tasks/{task_id} 轮询最终答案。
-    """
-    header = [
-        domain_agent_task.si(domain, query, workspace_id)
-        for domain in domains
-    ]
+def launch_multi_agent_chord(query, workspace_id, domains=("entities","market","mechanics","growth")) -> str:
+    header = [domain_agent_task.si(domain, query, workspace_id) for domain in domains]
     callback = multi_agent_verify_task.s(query, workspace_id)
     result = chord(header)(callback)
-    return result.id
+    return result.id  # caller polls this task_id for final_answer
 ```

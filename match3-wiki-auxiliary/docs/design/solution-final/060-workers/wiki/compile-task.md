@@ -29,8 +29,8 @@
 |---|------|------|
 | 1 | 创建/更新 WikiPage 记录 | `find_by_topic` 若存在则复用，否则新建；状态设为 `COMPILING` |
 | 2 | 运行五步流水线 | `run_compile_pipeline(rt, topic, workspace_id)` — 详见 `030-rag/path-entry.md`（wiki-lookup 实现） |
-| 3 | 写回结果 | `page.status = PUBLISHED`，写入 `title / category / content / f_source_chunk_ids / compiled_at` |
-| 4 | 失败回写 | 任何异常：`page.status = FAILED`，写入 `page.error` |
+| 3 | 写回结果 | `page.status = PUBLISHED`，写入 `title / category / content / source_chunk_ids / compiled_at` |
+| 4 | 失败回写 | `Match3Exception`：`FAILED` + `raise`（不重试）；其他异常：`FAILED` + `retry()`（最多 2 次）|
 
 ---
 
@@ -60,94 +60,46 @@ FAILED
 对同一 `(topic, workspace_id)` 重复触发编译时：
 - 复用已有的 `WikiPage` 行（`find_by_topic` 命中）
 - 重置 `status = COMPILING`、`error = None`
-- 编译完成后覆盖写 `content / title / category / f_source_chunk_ids / compiled_at`
+- 编译完成后覆盖写 `content / title / category / source_chunk_ids / compiled_at`
 
 这意味着旧版本在编译期间暂时不可读（`status = COMPILING`），前端需根据状态展示"正在更新"提示。
 
 ---
 
-## 源码
+## 核心实现
+
+**文件**：`app/workers/tasks/compile_task.py`
 
 ```python
-# app/workers/tasks/compile_task.py
-from __future__ import annotations
-from datetime import datetime, timezone
-from uuid import uuid4
-from app.workers.celery_app import celery_app
-from app.workers.worker_runtime import get_runtime
-from app.common.exceptions import Match3Exception
-from app.storage.repositories.wiki_page_repo import WikiPageRepository
-from app.storage.entities.wiki_page import WikiPage, WikiPageStatus
-from app.services.wiki_compile_pipeline import run_compile_pipeline
-
-
-@celery_app.task(
-    name="app.workers.tasks.compile_task.compile_topic",
-    bind=True,
-    max_retries=2,
-    default_retry_delay=30,
-    time_limit=300,
-    soft_time_limit=270,
-)
+@celery_app.task(name="…compile_topic", bind=True, max_retries=2, default_retry_delay=30,
+                 time_limit=300, soft_time_limit=270)
 def compile_topic(self, topic: str, workspace_id: str) -> str:
-    """
-    使用 OpenKB 五步流水线为指定话题编译 Wiki 页面。
-
-    若 WikiPage 记录不存在则新建；若已存在则复用并覆盖写。
-    状态流转：QUEUED -> COMPILING -> PUBLISHED（成功）/ FAILED（出错）。
-    成功时返回 wiki_page_id。
-    """
-    rt = get_runtime()
     wiki_repo = WikiPageRepository(rt.db_engine)
-    now = datetime.now(timezone.utc)
 
-    # 创建或复用 WikiPage 行
+    # upsert: create new or reuse existing WikiPage row, set status=COMPILING
     page = wiki_repo.find_by_topic(topic, workspace_id)
     if not page:
-        page = WikiPage(
-            id=str(uuid4()),
-            workspace_id=workspace_id,
-            topic=topic,
-            title=topic,            # 占位符；流水线将设置真实 title
-            status=WikiPageStatus.COMPILING,
-            created_at=now,
-            updated_at=now,
-        )
+        page = WikiPage(id=str(uuid4()), workspace_id=workspace_id, topic=topic,
+                        title=topic,  # placeholder; pipeline will set real title
+                        status=WikiPageStatus.COMPILING, created_at=now, updated_at=now)
         wiki_repo.insert(page)
     else:
-        page.status = WikiPageStatus.COMPILING
-        page.error = None
-        page.updated_at = now
+        page.status = WikiPageStatus.COMPILING; page.error = None
         wiki_repo.update(page)
 
     try:
-        content, title, category, source_chunk_ids = run_compile_pipeline(
-            rt, topic, workspace_id
-        )
+        content, title, category, source_chunk_ids = run_compile_pipeline(rt, topic, workspace_id)
     except Match3Exception as exc:
-        page.status = WikiPageStatus.FAILED
-        page.error = str(exc)
-        page.updated_at = datetime.now(timezone.utc)
-        wiki_repo.update(page)
-        raise
+        page.status = WikiPageStatus.FAILED; page.error = str(exc)
+        wiki_repo.update(page); raise   # business error: no retry
     except Exception as exc:
-        page.status = WikiPageStatus.FAILED
-        page.error = str(exc)
-        page.updated_at = datetime.now(timezone.utc)
+        page.status = WikiPageStatus.FAILED; page.error = str(exc)
         wiki_repo.update(page)
-        try:
-            raise self.retry(exc=exc)
-        except self.MaxRetriesExceededError:
-            raise
+        raise self.retry(exc=exc)       # MaxRetriesExceededError propagates naturally
 
-    page.status = WikiPageStatus.PUBLISHED
-    page.title = title
-    page.category = category
-    page.content = content
-    page.source_chunk_ids = source_chunk_ids
+    page.status = WikiPageStatus.PUBLISHED; page.title = title; page.category = category
+    page.content = content; page.source_chunk_ids = source_chunk_ids
     page.compiled_at = datetime.now(timezone.utc)
-    page.updated_at = page.compiled_at
     wiki_repo.update(page)
-
     return page.id
 ```

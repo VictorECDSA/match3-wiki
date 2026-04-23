@@ -1,0 +1,106 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.env
+.venv
+venv/
+env/
+ENV/
+
+# Node.js & TypeScript
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+coverage/
+target/
+out/
+.next/
+.nuxt/
+
+# Frontend specific
+.turbo
+.vercel
+.output
+
+# IDEs
+.claude
+.codebuddy
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+*.bak
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Sensitive information
+*.pem
+*.key
+*.crt
+*.csr
+.env.local
+.env.*.local
+secrets.json
+config.secret.*
+
+# Workspace runtime files
+match3-wiki-backend/workspace/
+match3-wiki-frontend/workspace/
+match3-wiki-auxiliary/workspace/
+**/workspace/
+**/*-ssl/
+
+# AI runtime working directories
+vllm/
+ollama/
+llamacpp/
+
+# Testing
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+tmp/
+temp/
+
+# Package manager lock files (optional - uncomment if you want to ignore)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+# poetry.lock

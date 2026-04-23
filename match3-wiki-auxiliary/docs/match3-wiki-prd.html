@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三消游戏行业知识库 PRD v0.5</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+    "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+  font-size: 15px; line-height: 1.8; color: #1a1a2e; background: #f4f6fb;
+}
+.cover {
+  background: linear-gradient(135deg, #0d1b4b 0%, #1a3a7c 60%, #0d1b4b 100%);
+  color: white; padding: 72px 60px 60px;
+}
+.cover h1 { font-size: 2.2em; font-weight: 700; letter-spacing: 0.02em; }
+.cover .sub { font-size: 1.3em; opacity: 0.85; margin-top: 6px; font-weight: 300; }
+.cover .meta { opacity: 0.65; font-size: 0.9em; margin-top: 16px; }
+.cover .badges { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+.badge {
+  display: inline-block; background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25); border-radius: 4px;
+  padding: 4px 12px; font-size: 0.82em;
+}
+.toc-bar {
+  background: #1a3a7c; color: rgba(255,255,255,0.85);
+  padding: 12px 60px; font-size: 0.82em; letter-spacing: 0.03em;
+}
+.container { max-width: 980px; margin: 0 auto; padding: 40px 40px 100px; }
+h2 { font-size: 1.45em; color: #0d1b4b; border-bottom: 2px solid #dde4f5;
+     padding-bottom: 8px; margin: 2.2em 0 0.7em; font-weight: 700; }
+h3 { font-size: 1.15em; color: #1a3a7c; margin: 1.6em 0 0.5em; font-weight: 600; }
+h4 { font-size: 1em; color: #2d5a9c; margin: 1.2em 0 0.4em; font-weight: 600; }
+p { margin: 0.5em 0; }
+hr { border: none; border-top: 1px solid #dde4f5; margin: 2em 0; }
+blockquote {
+  border-left: 3px solid #4a7fd4; background: #eef3ff;
+  padding: 10px 16px; margin: 1em 0; border-radius: 0 6px 6px 0;
+  color: #2d4a8a; font-size: 0.93em;
+}
+pre {
+  background: #111827; color: #e2e8f5; border-radius: 8px;
+  padding: 18px 20px; overflow-x: auto; font-size: 12.5px;
+  line-height: 1.65; margin: 1em 0; border: 1px solid #1e2d5c;
+}
+code { font-family: "SF Mono", "Fira Code", Consolas, monospace; }
+p code, li code, td code, blockquote code {
+  background: #e8eeff; color: #1a3a7c; padding: 1px 5px;
+  border-radius: 3px; font-size: 0.87em;
+}
+table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.9em; }
+th {
+  background: #1a3a7c; color: white; padding: 9px 14px;
+  text-align: left; font-weight: 600; font-size: 0.88em;
+}
+td { padding: 8px 14px; border-bottom: 1px solid #dde4f5; vertical-align: top; }
+tr:nth-child(even) td { background: #f0f4ff; }
+tr:hover td { background: #e4ecff; }
+li { margin: 3px 0 3px 1.6em; }
+li.task { list-style: none; margin-left: 0.2em; }
+strong { color: #0d1b4b; }
+a { color: #3b6fd4; }
+.version-tag {
+  display: inline-block; background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3); border-radius: 3px;
+  padding: 2px 8px; font-size: 0.75em; vertical-align: middle; margin-left: 8px;
+}
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>三消游戏行业知识库</h1>
+  <div class="sub">Match-3 Wiki — 需求文档 <span class="version-tag">v0.5</span></div>
+  <div class="meta">2026-04-19 &nbsp;·&nbsp; 工程化版本</div>
+  <div class="badges">
+    <span class="badge">Phase 1 聚焦三消</span>
+    <span class="badge">CLAUDE.md 规范</span>
+    <span class="badge">Audit 反馈机制</span>
+    <span class="badge">多 Agent 门控检查点</span>
+    <span class="badge">数据溯源追踪</span>
+  </div>
+</div>
+<div class="toc-bar">一、背景目标 &nbsp;·&nbsp; 二、范围定义 &nbsp;·&nbsp; 三、知识库结构 &nbsp;·&nbsp; 四、页面模板 &nbsp;·&nbsp; 五、资料来源 &nbsp;·&nbsp; 六、工具链 &nbsp;·&nbsp; 七、分阶段计划 &nbsp;·&nbsp; 八、质量标准 &nbsp;·&nbsp; 九、决策记录 &nbsp;·&nbsp; 十、冷启动 &nbsp;·&nbsp; 十一、发布方案 &nbsp;·&nbsp; 十二、更新机制 &nbsp;·&nbsp; 十三、用户获取 &nbsp;·&nbsp; 十四、CLAUDE.md &nbsp;·&nbsp; 十五、Audit 机制</div>
+<div class="container">
+<h1 id="三消游戏行业知识库-match-3-wiki-需求文档">三消游戏行业知识库（Match-3 Wiki）需求文档</h1>
+
+<p><strong>版本：</strong> v0.5</p>
+<p><strong>日期：</strong> 2026-04-19</p>
+<p><strong>状态：</strong> 工程化版——CLAUDE.md 规范、Audit 机制、多 Agent 门控检查点</p>
+
+<hr>
+
+<h2 id="一-项目背景与目标">一、项目背景与目标</h2>
+
+<h3 id="背景">背景</h3>
+
+<p>三消游戏（Match-3）及其变体（Merge 2、Merge 3、Blast 等）是全球手游收入最高的品类之一，但行业内缺乏系统性的中文知识沉淀。相关知识高度分散于 GDC 演讲、学术论文、游戏评测、开发者博客、社区讨论等各类英文/中文来源，从业者无法高效获取。</p>
+
+<h3 id="目标">目标</h3>
+
+<p>构建一个面向游戏行业从业者的<strong>三消游戏垂直知识库</strong>，通过 AI 驱动的全网资料收集与编译，将分散知识系统化、结构化，形成可持续维护的行业参考 Wiki。</p>
+
+<h3 id="核心价值">核心价值</h3>
+
+<li><strong>策划</strong>：历史案例库、机制设计原则、关卡设计经验</li>
+<li><strong>开发</strong>：技术选型参考、性能优化经验、已知问题模式</li>
+<li><strong>测试</strong>：测试用例来源、质量标准参考</li>
+<li><strong>市场/BD</strong>：竞品分析、市场数据、买量策略、用户研究</li>
+<li><strong>产品/运营</strong>：元游戏设计、商业化模型、版号合规</li>
+
+<hr>
+
+<h2 id="二-范围定义">二、范围定义</h2>
+
+<h3 id="覆盖品类-分阶段">覆盖品类（分阶段）</h3>
+
+<p><strong>Phase 1 优先收录（核心主题）：</strong></p>
+
+<table>
+<thead><tr><th>品类</th><th>说明</th><th>代表游戏</th></tr></thead>
+<tbody><tr><td><strong>三消经典（Match-3 Classic）</strong></td><td>消除同色/同形三个及以上棋子</td><td>Candy Crush Saga、Bejeweled、Jewel Mania</td></tr>
+<tr><td><strong>三消冒险（Puzzle Adventure）</strong></td><td>三消+叙事/装饰元游戏</td><td>Gardenscapes、Homescapes、Royal Match</td></tr>
+</tbody></table>
+
+<blockquote>Phase 1 <strong>只收录以上两个子类</strong>，这是三消的核心谱系，也是数据最丰富、研究价值最高的品类。</blockquote>
+
+<p><strong>Phase 2 扩展收录（第二阶段再做）：</strong></p>
+
+<table>
+<thead><tr><th>品类</th><th>说明</th><th>代表游戏</th></tr></thead>
+<tbody><tr><td>Blast 变体</td><td>点击消除，非滑动匹配</td><td>Toon Blast、Toy Blast</td></tr>
+<tr><td>Merge 2</td><td>合并同类两个升级</td><td>Merge Mansion、Merge Master</td></tr>
+<tr><td>Merge 3</td><td>合并同类三个升级</td><td>Triple Match 3D、Merge Island</td></tr>
+<tr><td>其他变体</td><td>与三消有设计关联的品类</td><td>根据资料收录情况决定</td></tr>
+</tbody></table>
+
+<h3 id="内容范围">内容范围</h3>
+
+<p><strong>收录：</strong></p>
+<li>游戏历史与品类演化</li>
+<li>核心机制设计（棋盘、特殊棋子、关卡目标、障碍物）</li>
+<li>元游戏系统（生命值、进度、活动、社交）</li>
+<li>商业化设计（IAP、订阅、广告变现）</li>
+<li>市场数据与竞争格局（全球 + 中国市场）</li>
+<li>技术实现与引擎选型</li>
+<li>美术风格与用户体验</li>
+<li>用户获取与增长策略（付费买量、自然流量、ASO、社区）</li>
+<li>制作公司与关键人物档案</li>
+
+<p><strong>Phase 1 暂不收录（Phase 2 再做）：</strong></p>
+<li>Blast / Merge 等变体品类</li>
+<li>端游/主机三消游戏（除非对手游有直接设计影响）</li>
+<li>玩家向攻略内容（目标受众是从业者，非玩家）</li>
+<li>对外发布网站（Phase 1 只做内容，不做建站）</li>
+
+<hr>
+
+<h2 id="三-知识库结构">三、知识库结构</h2>
+
+<pre><code>match3-wiki/
+├── raw/                            # 原始资料（零门槛，任何格式均可）
+│   ├── gdc/                        # GDC 演讲 PDF
+│   ├── reports/                    # 市场报告
+│   ├── web/                        # WebFetch 抓取存档
+│   └── [filename].md / .pdf / .txt
+│
+├── wiki/                           # 编译后的知识库（有强制字段）
+│   ├── index.md                    # 全局入口目录
+│   ├── log/                        # 编译日志（append-only，按周/月）
+│   │   └── week-YYYY-WW.md
+│   │
+│   ├── audit/                      # 人工纠错反馈（结构化，Agent 可处理）
+│   │   └── {article-slug}--{YYYYMMDD}--{id}.md
+│   │
+│   ├── alt/                        # 待合并的重复/冲突文章（临时暂存）
+│   │
+├── history/                        # 历史与演化
+│   ├── timeline.md                 # 品类进化时间线
+│   ├── genre-origins.md            # 起源（Tetris→Bejeweled→CandyCrush）
+│   ├── market-evolution.md         # 市场演变
+│   └── key-titles/                 # 里程碑游戏专题页
+│       ├── bejeweled.md
+│       ├── candy-crush-saga.md
+│       ├── royal-match.md
+│       └── ...
+│
+├── mechanics/                      # 机制设计库
+│   ├── core-loop.md                # 核心循环
+│   ├── board-design.md             # 棋盘类型
+│   ├── special-pieces.md           # 特殊棋子图鉴
+│   ├── level-design/
+│   │   ├── difficulty-curve.md     # 难度曲线
+│   │   ├── obstacle-types.md       # 障碍物图鉴
+│   │   └── level-goals.md          # 关卡目标类型
+│   ├── meta-systems/
+│   │   ├── lives-energy.md         # 生命/能量系统
+│   │   ├── progression.md          # 进度系统
+│   │   ├── events.md               # 活动系统
+│   │   └── social.md               # 社交系统
+│   └── monetization/
+│       ├── iap-patterns.md         # IAP 设计模式
+│       ├── booster-design.md       # 道具设计
+│       └── subscription.md         # 订阅模型
+│
+├── variants/                       # 变体品类专题
+│   ├── match3-classic.md
+│   ├── puzzle-adventure.md
+│   ├── blast.md
+│   ├── merge2.md
+│   └── merge3.md
+│
+├── market/                         # 市场与商业
+│   ├── global-data.md
+│   ├── china-market.md
+│   ├── competitive-landscape.md
+│   └── ua-strategies.md            # 买量策略概览
+│
+├── growth/                         # 用户获取专题（独立板块）
+│   ├── overview.md                 # 三消用户获取全局观（付费+自然）
+│   ├── paid-ua/                    # 付费买量
+│   │   ├── channels-overview.md    # 渠道全局对比
+│   │   ├── meta-ads.md             # Meta/Facebook 投放策略
+│   │   ├── google-uac.md           # Google UAC / PMAX
+│   │   ├── tiktok-ads.md           # TikTok 买量
+│   │   ├── apple-search-ads.md     # ASA（苹果搜索广告）
+│   │   ├── applovin-max.md         # AppLovin MAX 竞价
+│   │   └── china-channels.md       # 国内渠道（穿山甲/腾讯/华为）
+│   ├── organic/                    # 自然流量获取
+│   │   ├── aso.md                  # ASO（应用商店优化）
+│   │   ├── content-marketing.md    # 内容营销（视频/博客/社媒）
+│   │   ├── community.md            # 社区建设与口碑
+│   │   └── influencer.md           # KOL/网红合作
+│   ├── creatives/                  # 素材策略
+│   │   ├── video-ads.md            # 视频素材规律
+│   │   ├── playable-ads.md         # 可玩广告设计
+│   │   ├── ugc-style.md            # UGC 风格素材
+│   │   └── creative-analysis.md   # 竞品素材拆解方法论
+│   ├── metrics/                    # 指标体系
+│   │   ├── kpi-framework.md        # CPI/ROAS/LTV/CAC/K-factor
+│   │   ├── payback-period.md       # 回收周期分析
+│   │   └── ltv-modeling.md         # LTV 预测模型
+│   └── case-studies/               # 案例研究
+│       ├── royal-match-growth.md   # Royal Match 增长案例（标杆）
+│       ├── candy-crush-growth.md   # Candy Crush 增长演变
+│       └── playrix-playbook.md     # Playrix 用户获取方法论
+│
+├── production/                     # 制作知识
+│   ├── tech-stack.md
+│   ├── art-style-guide.md
+│   ├── testing-patterns.md
+│   └── localization.md
+│
+└── entities/                       # 实体档案（自动生成）
+    ├── companies/                  # King、Playrix、Dream Games...
+    ├── designers/                  # 关键设计师
+    └── titles/                     # 所有收录游戏索引</code></pre>
+
+<hr>
+
+<h2 id="四-每页内容标准模板">四、每页内容标准模板</h2>
+
+<p>所有页面强制遵守以下结构（由 LLM 在编译时填充）。<strong>数据质量是评价页面价值的首要标准</strong>，能附上具体数字的内容要优先呈现。</p>
+
+<blockquote><strong>重要原则：</strong> 强制字段只适用于 <code>wiki/</code> 编译页面，<code>raw/</code> 原始资料零门槛。LLM compile 时无法填写的字段统一写 <code>待补充：需要[具体来源类型]</code>，<strong>禁止留空，但允许"已知待补充"</strong>。</blockquote>
+
+<h3 id="4-1-机制-设计类页面模板">4.1 机制/设计类页面模板</h3>
+
+<pre><code>---
+title: "[机制/概念名称]"
+type: mechanic
+tags: [match-3, level-design]          # 主题 tag
+era: []                                 # 时间 tag，仅供参考，如 ["2016-2020"]
+genre: [match3-classic, puzzle-adventure]
+data_richness: ★★★☆☆                  # 编译时自评，见评级标准
+status: draft                          # draft → reviewed → verified
+last_updated: YYYY-MM-DD
+sources:
+  - file: raw/gdc-2019-gardenscapes.pdf
+    extracted: [留存率数据, 关卡节奏设计]
+  - url: https://gamediscover.co/...
+    extracted: [市场份额估算]
+---
+
+## [机制/概念名称]
+
+### 定义
+[是什么，一段话]
+
+### 核心数据  ← 优先填充；无数据时写"待补充：需要[来源类型]"
+&lt;!-- 禁止写无来源的模糊描述，如"留存率较高" --&gt;
+| 指标 | 数值 | 来源 | 数据时间 |
+|------|------|------|---------|
+| [指标名] | [具体数字] | [来源名称] | YYYY 或 YYYY-MM |
+
+### 设计意图
+[为什么这样设计，设计者的原始意图]
+
+### 成功案例
+&lt;!-- 每个案例：游戏名 + 时间（行内） + 至少一个可量化结果 --&gt;
+**[游戏名]**（YYYY）：[具体效果，附数据]
+
+### 失败案例
+[哪些游戏用了但失败了，分析原因]
+
+### 设计陷阱
+[常见踩坑点]
+
+### 延伸阅读
+[来源链接、GDC 演讲、学术论文等]
+
+### 相关条目
+[[相关机制]] [[相关游戏]] [[相关公司]]</code></pre>
+
+<h3 id="4-2-市场-数据类页面模板">4.2 市场/数据类页面模板</h3>
+
+<pre><code>---
+title: "[市场主题名称]"
+type: market
+tags: [market-data, global]
+era: ["2023-2025"]
+data_richness: ★★★★★
+status: draft
+last_updated: YYYY-MM-DD
+sources:
+  - file: raw/reports/sensor-tower-2024-casual.pdf
+    extracted: [全球收入排名, 下载量趋势]
+  - url: https://appmagic.rocks/...
+    extracted: [Top10 游戏收入]
+---
+
+## [市场主题名称]
+
+### 核心数据摘要  ← 首屏必须有表格，无数据标注"待补充"
+| 维度 | 数值 | 来源 | 数据时间 |
+|------|------|------|---------|
+| 全球市场规模 | $XX 亿 | Sensor Tower | 202X |
+| 年增长率 | XX% | data.ai | 202X |
+| Top1 游戏收入 | $XX 亿 | AppMagic | 202X |
+
+### 市场格局
+[竞争格局描述，附份额数据]
+
+### 趋势分析
+[近 12-24 个月的变化趋势，以主题/现象组织，时间作为佐证数据点]
+
+### 中国市场专节（如适用）
+[来源：伽马数据、游戏葡萄等]
+
+### 数据局限性说明
+[估算方法、误差范围、覆盖范围]
+
+### 延伸阅读</code></pre>
+
+<h3 id="4-3-用户获取类页面模板">4.3 用户获取类页面模板</h3>
+
+<pre><code>---
+title: "[渠道/策略名称]"
+type: growth
+tags: [user-acquisition, paid-ua]      # 或 organic, aso, community
+era: []
+data_richness: ★★★☆☆
+status: draft
+last_updated: YYYY-MM-DD
+sources:
+  - file: raw/gdc/ua-casual-2023.pdf
+    extracted: [CPI 基准, ROAS 案例]
+  - url: https://facebook.com/ads/library/...
+    extracted: [Royal Match 在投素材风格, 观察时间 2026-04]
+---
+
+## [渠道/策略名称]
+
+### 渠道概述
+
+### 关键指标基准  ← 必填；无数据标注"待补充：需行业报告或实测"
+| 指标 | 参考值 | 来源 | 数据时间 |
+|------|--------|------|---------|
+| CPI（iOS/美国） | $X.X | [来源] | 202X |
+| ROAS D30 | XX% | [来源] | 202X |
+
+### 三消品类实战经验
+[具体策略，优先引用可验证案例，时间作为行内标注]
+
+### 竞品观察
+[注明观察时间，素材来源平台]
+
+### 相关条目</code></pre>
+
+<hr>
+
+<h2 id="五-资料来源矩阵">五、资料来源矩阵</h2>
+
+<table>
+<thead><tr><th>来源</th><th>语言</th><th>内容类型</th><th>收集方式</th><th>优先级</th></tr></thead>
+<tbody><tr><td>GDC Vault（gdc.com/vault）</td><td>英文</td><td>开发者演讲 PDF/视频</td><td>手动下载 + Whisper 转录</td><td>高</td></tr>
+<tr><td>App Store / Google Play 产品页</td><td>中英</td><td>官方描述、用户评论</td><td>WebFetch</td><td>高</td></tr>
+<tr><td>游戏葡萄 / DataEye / 伽马数据</td><td>中文</td><td>市场数据报告</td><td>PDF + WebFetch</td><td>高</td></tr>
+<tr><td>Gamediscover.co</td><td>英文</td><td>行业分析</td><td>WebFetch</td><td>高</td></tr>
+<tr><td>Reddit r/gamedev / r/matchgames</td><td>英文</td><td>从业者讨论</td><td>WebFetch</td><td>中</td></tr>
+<tr><td>知乎游戏专栏</td><td>中文</td><td>行业分析</td><td>WebFetch</td><td>中</td></tr>
+<tr><td>各游戏官方 wiki</td><td>英文</td><td>游戏内容详情</td><td>WebFetch</td><td>中</td></tr>
+<tr><td>Google Patents</td><td>英文</td><td>游戏机制专利</td><td>PDF</td><td>中</td></tr>
+<tr><td>Steam（PC 三消）</td><td>中英</td><td>评测、讨论</td><td>WebFetch</td><td>低</td></tr>
+<tr><td>YouTube GDC 频道</td><td>英文</td><td>视频演讲</td><td>Whisper 转录</td><td>按需</td></tr>
+<tr><td><strong>Facebook Ad Library</strong></td><td>英文</td><td>竞品在投素材</td><td>WebFetch + agent-browser</td><td>高（UA 专项）</td></tr>
+<tr><td><strong>TikTok Creative Center</strong></td><td>英文</td><td>竞品 TikTok 素材</td><td>WebFetch + agent-browser</td><td>高（UA 专项）</td></tr>
+<tr><td><strong>Sensor Tower / data.ai</strong></td><td>英文</td><td>买量数据、下载量</td><td>WebFetch</td><td>高（UA 专项）</td></tr>
+<tr><td><strong>AppMagic</strong></td><td>英文</td><td>收入/下载/买量估算</td><td>WebFetch</td><td>高（UA 专项）</td></tr>
+<tr><td><strong>MobileAction</strong></td><td>英文</td><td>ASO + ASA 关键词</td><td>WebFetch</td><td>中（UA 专项）</td></tr>
+<tr><td>DataEye（数眼）</td><td>中文</td><td>国内买量数据/素材监测</td><td>WebFetch</td><td>高（国内 UA）</td></tr>
+</tbody></table>
+
+<hr>
+
+<h2 id="六-工具链方案">六、工具链方案</h2>
+
+<h3 id="核心工具组合">核心工具组合</h3>
+
+<pre><code>[资料收集层]
+Obsidian Web Clipper（浏览器插件，随手收集）
++ WebFetch / agent-browser（批量抓取）
++ Whisper（GDC 视频转录）
+    ↓
+[raw/ 原始资料目录]
+    ↓
+[编译层]
+nvk/llm-wiki（主力 Wiki 编译工具）
+    /wiki:ingest     → 单篇资料摄入
+    /wiki:research   → 多 Agent 并行深度研究
+    /wiki:lint       → 一致性检查
+    ↓
+[wiki/ Markdown 知识库]
+    ↓
+[图谱层]
+safishamsi/graphify --wiki
+    → 生成知识图谱（graph.json）
+    → 发现跨主题的隐藏关联
+    → graphify serve（MCP Server）
+    ↓
+[浏览层]
+Obsidian（Graph View 可视化 + 日常查阅）</code></pre>
+
+<h3 id="工具职责分工">工具职责分工</h3>
+
+<table>
+<thead><tr><th>工具</th><th>职责</th></tr></thead>
+<tbody><tr><td><strong>nvk/llm-wiki</strong></td><td>Wiki 主力编译器：资料摄入、多 Agent 研究、lint 维护</td></tr>
+<tr><td><strong>Graphify</strong></td><td>知识图谱化：发现跨主题关联，生成 MCP 查询接口</td></tr>
+<tr><td><strong>Obsidian</strong></td><td>人工浏览与随手收集</td></tr>
+<tr><td><strong>Repomix</strong></td><td>将整个 wiki 打包供 Claude 全局分析</td></tr>
+<tr><td><strong>Claude Code</strong></td><td>执行所有 wiki 操作的 AI 引擎</td></tr>
+</tbody></table>
+
+<h3 id="语言策略">语言策略</h3>
+
+<li><strong>存储语言：</strong> 中文（正文）+ 英文（专有名词保留原文）</li>
+<li><strong>原始资料：</strong> 中英文均收录，LLM 编译时翻译为中文正文</li>
+<li><strong>专有名词规范：</strong> 统一格式 <code>中文名（English Name）</code>，如 <code>消除连击（Cascade）</code></li>
+<li><strong>英文资料优先级：</strong> GDC 演讲、市场报告、官方说明文档优先收录</li>
+
+<hr>
+
+<h2 id="七-分阶段实施计划">七、分阶段实施计划</h2>
+
+<h3 id="phase-1-高质量内容优先-第-1-8-周">Phase 1：高质量内容优先（第 1-8 周）</h3>
+
+<p><strong>目标：聚焦 Match-3 Classic + Puzzle Adventure，建立高质量内容基础</strong></p>
+<p><strong>不做：建站、SEO、对外发布——只做内容</strong></p>
+
+<p><strong>任务清单：</strong></p>
+<li class="task">☐ 安装并配置 nvk/llm-wiki + Obsidian</li>
+<li class="task">☐ 完成 CLAUDE.md schema（参考第十四节）</li>
+<li class="task">☐ 收集首批种子资料（GDC 演讲 + 市场报告 + UA 数据）</li>
+<li class="task">☐ 完成核心机制页面（棋盘/特殊棋子/关卡目标/障碍物）</li>
+<li class="task">☐ 完成 5 款里程碑游戏专题页</li>
+<li class="task">☐ 完成市场数据页面（全球 + 中国）</li>
+<li class="task">☐ 完成用户获取板块初版（Royal Match 案例为必选）</li>
+
+<p><strong>Phase 1 门控检查点（全部通过才能进入 Phase 2）：</strong></p>
+
+<table>
+<thead><tr><th>检查点</th><th>验证方式</th><th>通过标准</th></tr></thead>
+<tbody><tr><td><strong>G1</strong> CLAUDE.md 完备</td><td>人工检查</td><td>taxonomy 覆盖 6 种 type；mandatory fields 已定义</td></tr>
+<tr><td><strong>G2</strong> 工具链跑通</td><td>执行 1 篇完整生命周期</td><td>ingest → compile → lint → audit 均无报错</td></tr>
+<tr><td><strong>G3</strong> 目录骨架完整</td><td>lint 检查</td><td><code>wiki/index.md</code> 存在；每个一级目录有入口页；无断链</td></tr>
+<tr><td><strong>G4</strong> 数据质量达标</td><td>脚本统计 frontmatter</td><td>50 篇中 ★★★★ 以上占比 ≥ 50%</td></tr>
+<tr><td><strong>G5</strong> 核心内容完成</td><td>人工清单</td><td>5 款里程碑游戏专题页 status=verified；Royal Match UA 页有 KPI 表</td></tr>
+<tr><td><strong>G6</strong> Audit 清零</td><td><code>audit_review.py</code></td><td><code>severity: error</code> 条目数 = 0</td></tr>
+<tr><td><strong>G7</strong> Lint 全绿</td><td><code>lint_wiki.py</code></td><td>broken links = 0；orphan pages = 0；log 结构合规</td></tr>
+</tbody></table>
+
+<h3 id="phase-2-扩展品类---图谱化-第-9-16-周">Phase 2：扩展品类 + 图谱化（第 9-16 周）</h3>
+
+<p><strong>目标：引入变体品类，完成知识图谱</strong></p>
+
+<p><strong>任务清单：</strong></p>
+<li class="task">☐ 扩展至 Blast / Merge 变体品类</li>
+<li class="task">☐ 完成元游戏系统深度页面</li>
+<li class="task">☐ 完成公司实体档案（King、Playrix、Dream Games 等 10+ 家）</li>
+<li class="task">☐ 完成商业化设计深度页面</li>
+<li class="task">☐ 每周运行 Graphify 更新知识图谱</li>
+
+<p><strong>Phase 2 门控检查点：</strong></p>
+
+<table>
+<thead><tr><th>检查点</th><th>通过标准</th></tr></thead>
+<tbody><tr><td><strong>G8</strong> 变体品类骨架</td><td>Blast / Merge 2 / Merge 3 各有 ≥ 3 篇 verified 页面</td></tr>
+<tr><td><strong>G9</strong> 公司档案</td><td>≥ 8 家公司档案 status=verified，含收入/员工数据</td></tr>
+<tr><td><strong>G10</strong> 图谱可用</td><td>Graphify 生成 graph.json，节点 ≥ 200，边 ≥ 500</td></tr>
+<tr><td><strong>G11</strong> 总量达标</td><td>总页数 ≥ 300；★★★★ 以上占比 ≥ 55%</td></tr>
+</tbody></table>
+
+<h3 id="phase-3-发布与可见度-第-17-周">Phase 3：发布与可见度（第 17 周+）</h3>
+
+<p><strong>目标：将内部 Wiki 变为对外可访问的行业参考</strong></p>
+
+<p><strong>任务清单：</strong></p>
+<li class="task">☐ 完成 Docusaurus 建站配置（参考第十一节）</li>
+<li class="task">☐ 配置中文搜索（Algolia / 本地插件）</li>
+<li class="task">☐ 完成 SEO 优化（frontmatter、关键词规划）</li>
+<li class="task">☐ 部署到 Vercel / GitHub Pages</li>
+<li class="task">☐ 全量 Graphify 图谱化，激活 MCP 查询</li>
+
+<p><strong>Phase 3 门控检查点：</strong></p>
+
+<table>
+<thead><tr><th>检查点</th><th>通过标准</th></tr></thead>
+<tbody><tr><td><strong>G12</strong> 站点可访问</td><td>公网 URL 可打开，中文搜索可用</td></tr>
+<tr><td><strong>G13</strong> SEO 就绪</td><td>全部页面有 description frontmatter；sitemap.xml 生成</td></tr>
+<tr><td><strong>G14</strong> 总量达标</td><td>总页数 ≥ 500；Lint 全绿</td></tr>
+</tbody></table>
+
+<h3 id="phase-4-持续运营-持续迭代">Phase 4：持续运营（持续迭代）</h3>
+
+<p><strong>目标：对行业从业者产生稳定价值</strong></p>
+
+<li class="task">☐ 建立定期更新机制（市场数据每季度、UA 素材每月监控）</li>
+<li class="task">☐ 数据时效性维护：<code>[数据过期]</code> 标记条目每季度清零</li>
+<li class="task">☐ 产出：1000+ 页，权威参考级别</li>
+
+<hr>
+
+<h3 id="多-agent-并行规则">多 Agent 并行规则</h3>
+
+<p><strong>任务隔离原则：</strong></p>
+<li>每个 <code>/wiki:research</code> 任务对应一个独立的 <code>raw/</code> 文件，不共享编辑同一篇 wiki 文章</li>
+<li>每次 compile 操作在 <code>log/week-YYYY-WW.md</code> 记录执行者标识</li>
+
+<p><strong>重复主题处理（两个 Agent 写了同一主题）：</strong></p>
+<li>两篇文章均移至 <code>alt/</code> 暂存，不直接合入 <code>wiki/</code></li>
+<li>以数据丰富度更高的为主体结构</li>
+<li>从另一篇提取<strong>互补内容</strong>（不同数据点、不同案例）逐节合并</li>
+<li>合并后 <code>sources</code> 字段包含两篇各自引用的所有来源</li>
+<li>合并确认后删除 <code>alt/</code> 临时文件</li>
+
+<p><strong>文章个体验收标准（Article Gate）：</strong></p>
+<pre><code>ingest ✓   → raw/ 文件存在，log/ 有摄入记录
+compile ✓  → frontmatter 7 个必填字段全部有值（可为"待补充"但不可空）
+           → 核心数据表格有内容，或有明确的"待补充"说明
+           → sources 字段非空（至少 1 条）
+lint ✓     → 无断链；type 在 taxonomy 枚举内；last_updated 有值
+reviewed ✓ → 人工阅读过；无 severity:error 的 audit 条目
+verified ✓ → 数据来源可追溯验证；data_richness ≥ ★★★</code></pre>
+
+<hr>
+
+<h2 id="八-质量标准">八、质量标准</h2>
+
+<h3 id="每页强制要求">每页强制要求</h3>
+
+<p><strong>基础门槛（必须满足才能合入）：</strong></p>
+<li class="task">☐ 至少 2 个可追溯的来源引用</li>
+<li class="task">☐ 至少 1 个成功案例（附游戏名 + 时间）</li>
+<li class="task">☐ 机制类页面：必须有失败案例或设计陷阱</li>
+<li class="task">☐ 市场类页面：必须有数据来源和数据时间标注</li>
+<li class="task">☐ 所有英文专有名词格式统一：<code>中文（English）</code></li>
+
+<p><strong>数据丰富度评级（编译时由 LLM 自评）：</strong></p>
+
+<table>
+<thead><tr><th>评级</th><th>标准</th><th>目标比例</th></tr></thead>
+<tbody><tr><td>★★★★★</td><td>核心数据表格完整，所有数字有来源+时间</td><td>Phase 1 目标 ≥ 30%</td></tr>
+<tr><td>★★★★☆</td><td>有具体数字，来源可追溯，时间标注部分缺失</td><td>Phase 1 目标 ≥ 40%</td></tr>
+<tr><td>★★★☆☆</td><td>有描述性数据（如"行业最高"），缺乏精确数字</td><td>可接受</td></tr>
+<tr><td>★★☆☆☆</td><td>纯定性描述，无数字</td><td>需要补充数据</td></tr>
+<tr><td>★☆☆☆☆</td><td>没有案例数据</td><td>不可合入</td></tr>
+</tbody></table>
+
+<blockquote><strong>数据奖励机制</strong>：<code>/wiki:research</code> 执行时，LLM 应优先使用能产出 ★★★★ 以上评级的来源；当发现具体数字（DAU、收入、留存率、CPI 等）时，应提取并填入核心数据表格，不得省略或模糊化。</blockquote>
+
+<h3 id="lint-检查项-nvk-llm-wiki-自动执行">Lint 检查项（nvk/llm-wiki 自动执行）</h3>
+
+<li>wikilink 完整性（无断链）</li>
+<li>页面有 frontmatter（分类、更新日期、品类标签、数据丰富度评级）</li>
+<li>index.md 与实际页面同步</li>
+<li>孤儿页面检测（无入链的页面）</li>
+<li><strong>数据时效性警告</strong>：<code>数据时间</code> 距今超过 2 年的条目自动标记 <code>[数据过期]</code></li>
+
+<hr>
+
+<h2 id="九-核心决策记录">九、核心决策记录</h2>
+
+<table>
+<thead><tr><th>问题</th><th>决策</th><th>影响</th></tr></thead>
+<tbody><tr><td>发布形式</td><td><strong>对外公开（Phase 3 执行）</strong></td><td>Phase 1-2 纯内容，Phase 3 才建站 SEO</td></tr>
+<tr><td>Phase 1 品类范围</td><td><strong>仅 Match-3 Classic + Puzzle Adventure</strong></td><td>Blast/Merge 等变体推至 Phase 2</td></tr>
+<tr><td>协作规模</td><td><strong>个人启动</strong></td><td>暂不引入多人编辑复杂度，预留扩展接口</td></tr>
+<tr><td>成本策略</td><td><strong>质量优先</strong></td><td>使用 Claude Opus/Sonnet，不限制 research 深度</td></tr>
+<tr><td>数据优先级</td><td><strong>数据丰富度是质量第一维度</strong></td><td>有具体数字的页面优先级高于纯描述性内容</td></tr>
+<tr><td>用户获取命名</td><td><strong>"用户获取"（含付费+自然）</strong></td><td>涵盖 ASO/内容/社区等非买量渠道</td></tr>
+<tr><td>更新机制</td><td><strong>定期更新</strong></td><td>按季度/月度批量更新（见第十一节）</td></tr>
+<tr><td>对外查询接口</td><td><strong>暂不提供</strong></td><td>Graphify 仅内部使用，不开放 MCP</td></tr>
+<tr><td>冷启动资料</td><td><strong>从零开始</strong></td><td>需要完整的冷启动收集方案（见第十节）</td></tr>
+</tbody></table>
+
+<hr>
+
+<h2 id="十-冷启动方案">十、冷启动方案</h2>
+
+<h3 id="问题-从零开始时没有-raw--资料-llm-无法编译">问题：从零开始时没有 raw/ 资料，LLM 无法编译</h3>
+
+<p>冷启动分两个阶段：<strong>手动播种</strong> → <strong>自动滚雪球</strong></p>
+
+<hr>
+
+<h3 id="10-1-第一批种子资料-手动收集-约-2-3-天">10.1 第一批种子资料（手动收集，约 2-3 天）</h3>
+
+<p>目标：收集 15-20 篇高价值资料，覆盖品类骨架</p>
+
+<p><strong>必收清单（按优先级）：</strong></p>
+
+<table>
+<thead><tr><th>#</th><th>资料</th><th>来源</th><th>获取方式</th></tr></thead>
+<tbody><tr><td>1</td><td>Candy Crush Saga 的关卡设计演讲</td><td>GDC Vault 搜索 "candy crush level design"</td><td>下载 PDF 或视频</td></tr>
+<tr><td>2</td><td>Match-3 品类演化综述</td><td>Gamediscover.co 搜索 "match-3 history"</td><td>WebFetch</td></tr>
+<tr><td>3</td><td>Royal Match 爆款分析</td><td>游戏葡萄 / AppMagic</td><td>WebFetch</td></tr>
+<tr><td>4</td><td>Gardenscapes 元游戏设计分析</td><td>GDC 2019 演讲</td><td>PDF</td></tr>
+<tr><td>5</td><td>三消手游市场报告（最新年度）</td><td>伽马数据 / data.ai</td><td>PDF 下载</td></tr>
+<tr><td>6</td><td>Merge 品类起源与演化</td><td>PocketGamer / GameAnalytics</td><td>WebFetch</td></tr>
+<tr><td>7</td><td>Bejeweled Wikipedia 页面</td><td>en.wikipedia.org</td><td>WebFetch</td></tr>
+<tr><td>8</td><td>King 公司简史</td><td>Wikipedia + 官网</td><td>WebFetch</td></tr>
+<tr><td>9</td><td>Playrix 公司简史</td><td>Wikipedia + 官网</td><td>WebFetch</td></tr>
+<tr><td>10</td><td>Dream Games / Royal Match 介绍</td><td>官网 + 媒体报道</td><td>WebFetch</td></tr>
+<tr><td>11</td><td>Royal Match 投放素材库</td><td>Facebook Ad Library 搜索 "Royal Match"</td><td>agent-browser</td></tr>
+<tr><td>12</td><td>三消游戏买量行业报告</td><td>AppMagic / Sensor Tower Blog</td><td>WebFetch</td></tr>
+<tr><td>13</td><td>GDC：休闲游戏 UA 演讲</td><td>GDC Vault 搜索 "casual game user acquisition"</td><td>PDF</td></tr>
+<tr><td>14</td><td>国内三消买量数据</td><td>DataEye / 游戏葡萄「买量」专栏</td><td>WebFetch</td></tr>
+</tbody></table>
+
+<p><strong>执行指令（Claude Code）：</strong></p>
+<pre><code># 对每个 URL 执行
+/wiki:ingest https://[url]
+
+# 对每个本地 PDF 执行
+/wiki:ingest raw/[filename].pdf</code></pre>
+
+<hr>
+
+<h3 id="10-2-结构性补全-ai-主动研究-第-1-2-周">10.2 结构性补全（AI 主动研究，第 1-2 周）</h3>
+
+<p>种子资料摄入后，用 nvk/llm-wiki 的 research 模式主动补全结构：</p>
+
+<pre><code># 按目录逐一补全
+/wiki:research --plan "三消游戏的核心循环设计原则"
+/wiki:research --plan "三消游戏特殊棋子的设计历史与分类"
+/wiki:research --plan "Merge 游戏与传统三消的设计差异"
+/wiki:research --plan "三消游戏商业化模型演变：从下载付费到 F2P"
+/wiki:research --plan "全球三消手游市场格局 2020-2025"
+/wiki:research --plan "中国三消手游市场特点与本土化"
+/wiki:research --plan "Royal Match 投放策略拆解：素材风格、渠道分布与爆量原因"
+/wiki:research --plan "三消游戏 CPI/LTV/ROAS 基准值与行业标准"
+/wiki:research --plan "Facebook Ad Library 三消游戏高效素材规律分析"</code></pre>
+
+<p>每条 research 完成后，AI 自动写入 wiki/，更新 index.md。</p>
+
+<hr>
+
+<h3 id="10-3-冷启动成功标准">10.3 冷启动成功标准</h3>
+
+<p>当以下条件全部满足，视为冷启动完成：</p>
+
+<li class="task">☐ <code>wiki/index.md</code> 有完整的一级目录（所有板块均有入口页）</li>
+<li class="task">☐ 历史板块：时间线页面完成，包含 1970s-2025 年关键节点</li>
+<li class="task">☐ 机制板块：核心循环、棋盘类型、特殊棋子基础页面完成</li>
+<li class="task">☐ 实体板块：至少 5 家公司档案、10 款游戏专题页完成</li>
+<li class="task">☐ 市场板块：全球市场概览页完成</li>
+<li class="task">☐ 总页数 ≥ 30 页，每页均有来源引用</li>
+
+<hr>
+
+<h2 id="十一-对外发布方案">十一、对外发布方案</h2>
+
+<h3 id="11-1-发布工具选型">11.1 发布工具选型</h3>
+
+<p>综合考虑：Markdown 原生支持、中文搜索、免费托管、SEO 友好</p>
+
+<p><strong>推荐方案：Docusaurus（首选）</strong></p>
+
+<table>
+<thead><tr><th>维度</th><th>Docusaurus</th><th>Obsidian Publish</th><th>GitBook</th><th>VitePress</th></tr></thead>
+<tbody><tr><td>中文搜索</td><td>✅ Algolia / 本地搜索插件</td><td>❌ 较弱</td><td>✅</td><td>✅</td></tr>
+<tr><td>SEO</td><td>✅ 优秀</td><td>⚠️ 一般</td><td>✅</td><td>✅</td></tr>
+<tr><td>免费托管</td><td>✅ GitHub Pages / Vercel</td><td>❌ $8/月</td><td>✅ 免费版有限制</td><td>✅ GitHub Pages</td></tr>
+<tr><td>自定义样式</td><td>✅ 完全控制</td><td>❌ 受限</td><td>⚠️ 有限</td><td>✅</td></tr>
+<tr><td>Markdown 兼容</td><td>✅ 直接用</td><td>✅ 直接用</td><td>⚠️ 需转换</td><td>✅ 直接用</td></tr>
+<tr><td>多语言支持</td><td>✅ 原生 i18n</td><td>❌</td><td>✅</td><td>✅</td></tr>
+<tr><td>部署难度</td><td>低（一次配置）</td><td>最低</td><td>低</td><td>低</td></tr>
+</tbody></table>
+
+<p><strong>备选方案：Obsidian Publish</strong>（如果希望最快上线，接受 $8/月成本）</p>
+
+<hr>
+
+<h3 id="11-2-发布架构">11.2 发布架构</h3>
+
+<pre><code>本地 Obsidian vault（编辑/维护）
+    ↓ git push
+GitHub 仓库（版本控制）
+    ↓ GitHub Actions 自动构建
+Docusaurus 站点
+    ↓ 自动部署
+Vercel / GitHub Pages（对外访问）</code></pre>
+
+<p><strong>同步策略：</strong></p>
+<li>Obsidian vault 即 Docusaurus 的 <code>docs/</code> 目录</li>
+<li><code>[[wikilinks]]</code> 需要用插件转换为标准 Markdown 链接（<code>docusaurus-plugin-content-docs</code> 支持）</li>
+<li>每次 <code>git push</code> 触发自动构建，约 2-3 分钟上线</li>
+
+<hr>
+
+<h3 id="11-3-seo-策略-面向游戏行业搜索">11.3 SEO 策略（面向游戏行业搜索）</h3>
+
+<p>目标关键词方向：</p>
+<li><code>三消游戏设计</code>、<code>三消游戏历史</code>、<code>Match-3 game design</code></li>
+<li><code>[游戏名] 设计分析</code>（如 <code>Royal Match 设计分析</code>）</li>
+<li><code>三消游戏机制</code>、<code>Merge 游戏设计</code></li>
+
+<p>每篇页面 frontmatter 需包含：</p>
+<pre><code>---
+title: "页面标题"
+description: "一句话描述（用于 SEO meta description）"
+tags: [match-3, game-design, level-design]
+last_updated: 2026-04-18
+---</code></pre>
+
+<hr>
+
+<h2 id="十二-定期更新机制">十二、定期更新机制</h2>
+
+<h3 id="更新节奏">更新节奏</h3>
+
+<table>
+<thead><tr><th>频率</th><th>触发内容</th><th>操作</th></tr></thead>
+<tbody><tr><td><strong>每月</strong></td><td>新游戏上线或爆款出现</td><td>新增游戏专题页 + 更新竞争格局页</td></tr>
+<tr><td><strong>每月</strong></td><td>UA 素材趋势监控</td><td>抓取 Facebook Ad Library + TikTok Creative Center，更新 creative-analysis.md</td></tr>
+<tr><td><strong>每季度</strong></td><td>市场数据报告更新</td><td>更新市场板块，补充最新数据</td></tr>
+<tr><td><strong>每季度</strong></td><td>CPI/ROAS 基准数据更新</td><td>更新 kpi-framework.md 的行业基准值</td></tr>
+<tr><td><strong>每半年</strong></td><td>重跑全量 Graphify</td><td>更新知识图谱，发现新关联</td></tr>
+<tr><td><strong>按需</strong></td><td>GDC 年会（每年 3 月）</td><td>批量摄入新演讲资料</td></tr>
+</tbody></table>
+
+<h3 id="月度更新-sop">月度更新 SOP</h3>
+
+<pre><code># 1. 收集新资料（每月初）
+/wiki:ingest [新游戏/新报告 URL]
+
+# 2. 更新相关页面
+/wiki:research --plan "[新游戏名] 的设计分析"
+
+# 3. Lint 检查
+/wiki:lint --fix
+
+# 4. 推送发布
+git add . &amp;&amp; git commit -m "月度更新 YYYY-MM" &amp;&amp; git push</code></pre>
+
+<hr>
+
+<h2 id="十三-用户获取专题">十三、用户获取专题</h2>
+
+<h3 id="13-1-背景与重要性">13.1 背景与重要性</h3>
+
+<p>用户获取（User Acquisition / Growth）涵盖<strong>一切让玩家发现并下载游戏的手段</strong>，包括付费买量、自然流量（ASO/内容/口碑/社区）、KOL 合作等。这是休闲游戏成功的核心杠杆之一。</p>
+
+<p>以 <strong>Royal Match</strong> 为例：Dream Games 通过独特的"保护国王"素材风格（付费）、极强的口碑传播（自然）和精准的渠道组合，在竞争极度激烈的三消赛道实现了从 0 到全球 Top 3 的突破——证明增长策略本身就是产品竞争力的组成部分。</p>
+
+<p>本专题面向<strong>增长/买量/市场/产品方向从业者</strong>，以可操作的策略分析 + 可验证的数据为核心，付费和自然渠道并重。</p>
+
+<hr>
+
+<h3 id="13-2-收录内容框架">13.2 收录内容框架</h3>
+
+<h4 id="渠道策略-付费---自然">渠道策略（付费 + 自然）</h4>
+
+<p><strong>付费买量渠道：</strong></p>
+
+<table>
+<thead><tr><th>渠道</th><th>适用场景</th><th>关键特性</th><th>代表三消投放商</th></tr></thead>
+<tbody><tr><td><strong>Meta（Facebook/Instagram）</strong></td><td>主力渠道，流量最大</td><td>精准定向、LAL 受众、视频/图文/可玩</td><td>King、Dream Games、Playrix</td></tr>
+<tr><td><strong>Google UAC / PMAX</strong></td><td>规模化跑量</td><td>全自动出价，依赖内置 AI 优化</td><td>全主流厂商</td></tr>
+<tr><td><strong>TikTok Ads</strong></td><td>年轻用户、素材驱动</td><td>UGC 风格素材效果突出</td><td>国内出海厂商</td></tr>
+<tr><td><strong>Apple Search Ads（ASA）</strong></td><td>iOS 精准意图用户</td><td>CPT/CPA 两种模式，ROI 高但规模有限</td><td>所有 iOS 重度买量商</td></tr>
+<tr><td><strong>AppLovin MAX / ironSource</strong></td><td>竞价变现+UA 闭环</td><td>Bidding 模式，减少人工干预</td><td>中小团队</td></tr>
+<tr><td><strong>穿山甲（字节）</strong></td><td>国内 Android</td><td>巨量引擎生态，素材消耗量大</td><td>国内休闲游戏厂商</td></tr>
+<tr><td><strong>腾讯广告</strong></td><td>微信/QQ 生态</td><td>社交关系链定向，适合中重度</td><td>腾讯系及合作发行商</td></tr>
+</tbody></table>
+
+<p><strong>自然流量渠道：</strong></p>
+
+<table>
+<thead><tr><th>渠道</th><th>说明</th><th>适用方向</th></tr></thead>
+<tbody><tr><td><strong>ASO（应用商店优化）</strong></td><td>关键词排名、截图/视频优化、评分管理</td><td>所有游戏必做基础项</td></tr>
+<tr><td><strong>内容营销</strong></td><td>YouTube 攻略视频、TikTok 病毒传播、官方博客</td><td>品牌认知 + 长尾获客</td></tr>
+<tr><td><strong>KOL / 网红合作</strong></td><td>游戏博主测评、直播带量</td><td>新游冷启动曝光</td></tr>
+<tr><td><strong>社区建设</strong></td><td>Reddit、Discord、Facebook Group</td><td>核心用户留存 + 口碑传播</td></tr>
+<tr><td><strong>病毒/社交裂变</strong></td><td>邀请好友机制、排行榜、社交分享</td><td>产品内置增长</td></tr>
+<tr><td><strong>媒体/PR</strong></td><td>科技媒体、游戏媒体报道</td><td>首发曝光、里程碑事件</td></tr>
+</tbody></table>
+
+<h4 id="素材-creatives-策略">素材（Creatives）策略</h4>
+
+<p>三消游戏 UA 素材有明显的行业规律：</p>
+
+<li><strong>失败钩子（Fail Hook）</strong>：展示玩家"差一步就赢"的紧张感，刺激点击欲望（Royal Match 的"国王被欺负"即此逻辑）</li>
+<li><strong>真实玩法展示</strong>：直接录制游戏内操作，降低用户预期落差，提升留存</li>
+<li><strong>可玩广告（Playable Ads）</strong>：让用户在广告内直接体验关卡，适合三消品类，转化率显著高于视频</li>
+<li><strong>UGC 风格</strong>：手持手机录屏、真人出镜，规避"广告感"，TikTok 渠道效果尤佳</li>
+<li><strong>情感叙事素材</strong>：Gardenscapes 系列以家园改造剧情为钩子，与核心玩法无关但极度高效</li>
+
+<p><strong>素材监测来源：</strong></p>
+<li>Facebook Ad Library（<code>facebook.com/ads/library</code>）：查看任意 App 在 Meta 平台的全部在投广告</li>
+<li>TikTok Creative Center（<code>ads.tiktok.com/business/creativecenter</code>）：查看趋势素材和竞品投放</li>
+<li>DataEye 数眼：国内买量素材监测，覆盖穿山甲/腾讯/快手等渠道</li>
+
+<h4 id="核心指标体系">核心指标体系</h4>
+
+<table>
+<thead><tr><th>指标</th><th>全称</th><th>含义</th><th>三消行业参考值</th></tr></thead>
+<tbody><tr><td><strong>CPI</strong></td><td>Cost Per Install</td><td>每安装成本</td><td>iOS $1.5-5，Android $0.3-1.5（因地区差异大）</td></tr>
+<tr><td><strong>D1 Retention</strong></td><td>Day 1 Retention</td><td>次日留存</td><td>优秀 ≥ 40%，行业平均 30%</td></tr>
+<tr><td><strong>D7 Retention</strong></td><td>Day 7 Retention</td><td>7 日留存</td><td>优秀 ≥ 20%，行业平均 12%</td></tr>
+<tr><td><strong>LTV</strong></td><td>Lifetime Value</td><td>用户生命周期价值</td><td>依品类和付费率，高质量三消 $2-8/用户</td></tr>
+<tr><td><strong>ROAS</strong></td><td>Return on Ad Spend</td><td>广告花费回报率</td><td>D30 ROAS > 40% 为健康线</td></tr>
+<tr><td><strong>CAC</strong></td><td>Customer Acquisition Cost</td><td>获客成本</td><td>与 CPI 接近，有机流量越多 CAC 越低</td></tr>
+<tr><td><strong>Payback Period</strong></td><td>回收周期</td><td>从安装到回收买量成本的时间</td><td>健康目标 ≤ 6 个月</td></tr>
+</tbody></table>
+
+<h4 id="royal-match-ua-案例要点-标杆研究">Royal Match UA 案例要点（标杆研究）</h4>
+
+<p>Royal Match 是近年三消 UA 的最成功案例，核心经验：</p>
+
+<li><strong>素材定位差异化</strong>：绕开"消除"本身，主打"国王遇险/解救"情感叙事，与 Candy Crush 完全不同的视觉语言</li>
+<li><strong>高素材消耗量</strong>：团队据报每周测试数十组新素材，快速迭代淘汰低效素材</li>
+<li><strong>iOS 优先策略</strong>：优先在 iOS 获取高 LTV 用户，Meta + ASA 双渠道拉满</li>
+<li><strong>Meta Bidding + SKAN 适配</strong>：ATT 隐私变化后快速适配 SKAN，使用聚合测量工具维持归因精度</li>
+<li><strong>全球化投放</strong>：优先打美/英/德高价值市场，非美市场用于规模扩张降低整体 CPI</li>
+
+<hr>
+
+<h3 id="13-3-wiki-页面产出要求">13.3 Wiki 页面产出要求</h3>
+
+<p><strong>买量专题页面须额外包含：</strong></p>
+
+<li><code>投放截图/素材截图</code> 来源标注（务必标明抓取日期，素材时效性强）</li>
+<li><code>渠道基准 CPI</code> 必须标注数据来源和采集时间（行情波动大）</li>
+<li><code>竞品案例</code> 中区分"可验证数据"（Sensor Tower、AppMagic 第三方数据）与"行业估算"</li>
+
+<hr>
+
+<h3 id="13-4-数据来源优先级-ua-专项">13.4 数据来源优先级（UA 专项）</h3>
+
+<table>
+<thead><tr><th>来源</th><th>内容</th><th>可信度</th><th>获取方式</th></tr></thead>
+<tbody><tr><td>Facebook Ad Library</td><td>实时在投素材</td><td>★★★★★</td><td>agent-browser 爬取</td></tr>
+<tr><td>TikTok Creative Center</td><td>素材趋势</td><td>★★★★★</td><td>agent-browser 爬取</td></tr>
+<tr><td>Sensor Tower</td><td>下载量/收入/买量估算</td><td>★★★★☆</td><td>WebFetch（付费墙部分受限）</td></tr>
+<tr><td>AppMagic</td><td>收入/买量综合数据</td><td>★★★★☆</td><td>WebFetch</td></tr>
+<tr><td>MobileAction</td><td>ASA 关键词竞价数据</td><td>★★★★☆</td><td>WebFetch</td></tr>
+<tr><td>DataEye 数眼</td><td>国内渠道买量监测</td><td>★★★★☆</td><td>WebFetch</td></tr>
+<tr><td>GDC UA 演讲</td><td>厂商自述经验</td><td>★★★★★</td><td>PDF 下载</td></tr>
+<tr><td>游戏葡萄「买量」专栏</td><td>国内买量动态</td><td>★★★☆☆</td><td>WebFetch</td></tr>
+</tbody></table>
+
+<hr>
+
+<h2 id="附录-参考工具链接">附录：参考工具链接</h2>
+
+<table>
+<thead><tr><th>工具</th><th>GitHub / 官网</th></tr></thead>
+<tbody><tr><td>nvk/llm-wiki</td><td>https://github.com/nvk/llm-wiki</td></tr>
+<tr><td>safishamsi/graphify</td><td>https://github.com/safishamsi/graphify</td></tr>
+<tr><td>Obsidian</td><td>https://obsidian.md</td></tr>
+<tr><td>Repomix</td><td>https://github.com/yamadashy/repomix</td></tr>
+<tr><td>Docusaurus</td><td>https://docusaurus.io</td></tr>
+<tr><td>Karpathy LLM Wiki Gist</td><td>https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f</td></tr>
+<tr><td>Facebook Ad Library</td><td>https://facebook.com/ads/library</td></tr>
+<tr><td>TikTok Creative Center</td><td>https://ads.tiktok.com/business/creativecenter</td></tr>
+<tr><td>AppMagic</td><td>https://appmagic.rocks</td></tr>
+<tr><td>Sensor Tower</td><td>https://sensortower.com</td></tr>
+</tbody></table>
+
+<hr>
+
+<h2 id="十四-claude-md-内容规范">十四、CLAUDE.md 内容规范</h2>
+
+<blockquote><code>CLAUDE.md</code>（或 <code>AGENTS.md</code>）是 wiki 的"规训层"，Agent 执行任何操作前必须读取。它定义 taxonomy、强制字段、工作流指令和禁止行为。<strong>这是 Phase 1 启动的前置条件，必须在第一次 compile 前完成。</strong></blockquote>
+
+<h3 id="14-1-文章类型-taxonomy-6-种-强制枚举">14.1 文章类型 Taxonomy（6 种，强制枚举）</h3>
+
+<table>
+<thead><tr><th>type</th><th>用途</th><th>对应模板</th><th>强制数据字段</th></tr></thead>
+<tbody><tr><td><code>mechanic</code></td><td>游戏机制/设计模式</td><td>4.1 模板</td><td>核心数据表格</td></tr>
+<tr><td><code>title</code></td><td>游戏专题页</td><td>同 4.1，加 key-metrics</td><td>收入/DAU/留存</td></tr>
+<tr><td><code>company</code></td><td>公司/团队档案</td><td>同 4.1，加 company-profile</td><td>收入/规模/成立时间</td></tr>
+<tr><td><code>market</code></td><td>市场分析/竞争格局</td><td>4.2 模板</td><td>核心数据摘要表</td></tr>
+<tr><td><code>growth</code></td><td>用户获取/增长策略</td><td>4.3 模板</td><td>指标基准表</td></tr>
+<tr><td><code>history</code></td><td>历史/演化时间线</td><td>自由结构（可用时间轴）</td><td>关键节点年份</td></tr>
+</tbody></table>
+
+<blockquote><code>history</code> 是唯一允许以时间顺序为骨架的类型。其他所有类型<strong>禁止用年份/版本号作为小节标题</strong>，时间只作为行内标注或 <code>era</code> tag。</blockquote>
+
+<h3 id="14-2-frontmatter-强制字段-7-个-适用-wiki--所有页面">14.2 Frontmatter 强制字段（7 个，适用 wiki/ 所有页面）</h3>
+
+<pre><code>---
+title: ""          # 必填，非空
+type: ""           # 必填，枚举值之一
+tags: []           # 必填，至少 1 个
+data_richness: ""  # 必填，★ 评级（LLM 自评）
+status: draft      # 必填，枚举：draft / reviewed / verified
+last_updated: ""   # 必填，YYYY-MM-DD
+sources: []        # 必填，至少 1 条（可为 {file: "raw/..."} 或 {url: "..."}）
+---</code></pre>
+
+<p><strong><code>raw/</code> 目录无此要求，任何格式均可摄入。</strong></p>
+
+<h3 id="14-3-claude-md-工作流指令摘要">14.3 CLAUDE.md 工作流指令摘要</h3>
+
+<pre><code>## Workflow Commands
+
+/wiki:ingest &lt;file|url&gt;
+  → 将资料存入 raw/，在 log/week-YYYY-WW.md 追加摄入记录
+  → 不修改 wiki/ 任何文件
+
+/wiki:compile &lt;raw-file&gt;
+  → 从指定 raw 文件编译/更新对应 wiki 页面
+  → 填写所有 frontmatter 字段（不可留空，用"待补充"占位）
+  → 检查 sources 字段是否引用了该 raw 文件
+  → 若目标 wiki 页面已存在，提取互补内容合并，不覆盖
+
+/wiki:research --plan "&lt;主题&gt;"
+  → 自主研究指定主题，可并行调用多个子 Agent（每批 ≤ 5）
+  → 产出写入对应 wiki 页面，data_richness ≥ ★★★ 才可合入
+  → 遇到重复主题，将新产出存入 alt/，等待人工确认合并
+
+/wiki:audit --process-open
+  → 读取 audit/ 所有 status:open 的条目
+  → 按 severity 排序（error → warning → note）逐一处理
+  → 处理完成后更新 status:resolved，填写 resolved_by 字段
+
+/wiki:lint
+  → 执行 7 项自动检查（见第八节 Lint 检查项）
+  → 输出报告至 log/lint-YYYY-MM-DD.md</code></pre>
+
+<h3 id="14-4-禁止行为-llm-必须遵守">14.4 禁止行为（LLM 必须遵守）</h3>
+
+<li>❌ 将 raw/ 原始文件内容直接复制粘贴进 wiki 页面（必须经过编译/提炼）</li>
+<li>❌ 核心数据表格留空（必须有内容或"待补充"说明）</li>
+<li>❌ 用年份/版本号作为正文小节标题（<code>history</code> 类型除外）</li>
+<li>❌ sources 字段为空（至少引用 1 个来源）</li>
+<li>❌ 在未确认合并前直接覆盖已有 wiki 页面（应存入 alt/）</li>
+<li>❌ 写无来源标注的精确数字（如"留存率 42%"后面必须有来源）</li>
+
+<hr>
+
+<h2 id="十五-audit-反馈机制">十五、Audit 反馈机制</h2>
+
+<p>人工在阅读 wiki 页面时发现错误、过时内容、待补充数据，通过结构化的 audit 文件记录，Agent 定期批量处理。</p>
+
+<h3 id="15-1-audit-文件格式">15.1 Audit 文件格式</h3>
+
+<p>文件路径：<code>wiki/audit/{article-slug}--{YYYYMMDD}--{id}.md</code></p>
+
+<pre><code>---
+target: wiki/mechanics/special-pieces.md
+anchor: "皇家炸弹（Royal Bomb）的爆炸范围为 3×3"
+severity: error          # error | warning | note
+status: open             # open | resolved
+created: 2026-04-20
+---
+
+## 问题描述
+实际爆炸范围应为 5×5，而非 3×3。
+
+## 修正依据
+GDC 2024 Royal Match 技术演讲，第 12 页截图（见 raw/gdc2024-royal-match-tech.pdf）
+
+## resolved_by
+&lt;!-- 处理后填写 --&gt;
+resolved_at:
+resolved_source:         # 修正所依据的来源（文件路径或 URL）
+resolved_note:           # 具体改了什么</code></pre>
+
+<h3 id="15-2-严重程度定义">15.2 严重程度定义</h3>
+
+<table>
+<thead><tr><th>Severity</th><th>含义</th><th>处理时限</th></tr></thead>
+<tbody><tr><td><code>error</code></td><td>数据错误 / 重大事实错误</td><td>当周清零（Phase 1 门控 G6）</td></tr>
+<tr><td><code>warning</code></td><td>内容过时 / 来源缺失 / 数据需更新</td><td>当月处理</td></tr>
+<tr><td><code>note</code></td><td>建议补充 / 行文改进</td><td>按优先级处理</td></tr>
+</tbody></table>
+
+<h3 id="15-3-audit-处理指令">15.3 Audit 处理指令</h3>
+
+<pre><code># 查看所有 open audits（按严重程度分组）
+/wiki:audit --list
+
+# 处理所有 open audits
+/wiki:audit --process-open
+
+# 只处理 error 级别
+/wiki:audit --process-open --severity error</code></pre>
+
+<h3 id="15-4-纠错来源追踪">15.4 纠错来源追踪</h3>
+
+<p><strong>Audit 的 <code>resolved_source</code> 字段与文章 <code>sources</code> 字段联动：</strong></p>
+<li>若纠错依据是新的 raw 文件，先 <code>/wiki:ingest</code> 该文件，再在 <code>resolved_source</code> 填写其路径</li>
+<li>修正完成后，被修正文章的 <code>sources</code> 字段须增加该纠错来源（即修正也有 provenance）</li>
+
+<p>这样每次数据被推翻，都有完整的证据链：原来的数据从哪来 → 被哪个来源推翻 → 新数据是什么。</p>
+
+<hr>
+
+<p><em>文档版本：v0.5 — 新增 CLAUDE.md 规范（十四）、Audit 机制（十五）；模板升级 YAML frontmatter；Phase 增加二元门控检查点；多 Agent 冲突协议；时间作为 tag 而非骨架</em></p>
+
+</div>
+</body>
+</html>

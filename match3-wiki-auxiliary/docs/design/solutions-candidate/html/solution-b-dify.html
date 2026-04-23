@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案 B — Dify 低代码平台</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 15px; line-height: 1.8; color: #1a1a2e; background: #f4f6fb;
+}
+.cover {
+  background: linear-gradient(135deg, #065f46 0%, #059669 60%, #065f46 100%);
+  color: white; padding: 72px 60px 60px;
+}
+.cover h1 { font-size: 2em; font-weight: 700; }
+.cover .sub { font-size: 1.2em; opacity: 0.85; margin-top: 6px; }
+.cover .meta { opacity: 0.65; font-size: 0.9em; margin-top: 16px; }
+.cover .badges { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+.badge {
+  background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 4px; padding: 4px 12px; font-size: 0.82em; display: inline-block;
+}
+.recommended {
+  background: rgba(255,255,255,0.2); border: 2px solid white;
+  border-radius: 8px; padding: 12px 20px; margin-top: 20px;
+  font-weight: 700; font-size: 1.05em;
+}
+.nav { background: #065f46; padding: 10px 60px; font-size: 0.82em; color: rgba(255,255,255,0.8); }
+.nav a { color: rgba(255,255,255,0.7); text-decoration: none; margin-right: 16px; }
+.nav a:hover { color: white; }
+.container { max-width: 1000px; margin: 0 auto; padding: 40px 40px 100px; }
+h2 { font-size: 1.45em; color: #0d1b4b; border-bottom: 2px solid #dde4f5;
+     padding-bottom: 8px; margin: 2.2em 0 0.7em; font-weight: 700; }
+h3 { font-size: 1.15em; color: #065f46; margin: 1.6em 0 0.5em; font-weight: 600; }
+h4 { font-size: 1em; color: #059669; margin: 1.2em 0 0.4em; font-weight: 600; }
+p { margin: 0.5em 0; }
+hr { border: none; border-top: 1px solid #dde4f5; margin: 2em 0; }
+blockquote {
+  border-left: 3px solid #059669; background: #ecfdf5;
+  padding: 10px 16px; margin: 1em 0; border-radius: 0 6px 6px 0;
+  color: #065f46; font-size: 0.93em;
+}
+pre {
+  background: #111827; color: #e2e8f5; border-radius: 8px;
+  padding: 18px 20px; overflow-x: auto; font-size: 12.5px;
+  line-height: 1.65; margin: 1em 0;
+}
+code { font-family: "SF Mono", "Fira Code", Consolas, monospace; }
+p code, li code, td code {
+  background: #ecfdf5; color: #065f46; padding: 1px 5px;
+  border-radius: 3px; font-size: 0.87em; border: 1px solid #b5e5c5;
+}
+table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.88em; }
+th {
+  background: #065f46; color: white; padding: 9px 14px;
+  text-align: left; font-weight: 600;
+}
+td { padding: 8px 14px; border-bottom: 1px solid #dde4f5; vertical-align: top; }
+tr:nth-child(even) td { background: #f0fdf4; }
+li { margin: 3px 0 3px 1.6em; }
+strong { color: #0d1b4b; }
+a { color: #059669; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.arch-box {
+  background: #111827; color: #e2e8f5; border-radius: 12px;
+  padding: 28px; margin: 1em 0; font-family: "SF Mono", Consolas, monospace;
+  font-size: 13px; line-height: 2;
+}
+.step-card {
+  background: white; border-radius: 10px; padding: 20px 24px;
+  border: 1px solid #d1fae5; border-left: 4px solid #059669;
+  margin: 12px 0;
+  box-shadow: 0 2px 6px rgba(5,150,105,0.06);
+}
+.step-card .step-num {
+  background: #059669; color: white; border-radius: 50%;
+  width: 28px; height: 28px; display: inline-flex; align-items: center;
+  justify-content: center; font-weight: 700; font-size: 0.9em; margin-right: 10px;
+}
+.step-card .step-title { font-weight: 700; color: #065f46; font-size: 1em; }
+.pro-con {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 1em 0;
+}
+.pro-box, .con-box {
+  background: white; border-radius: 8px; padding: 16px;
+  border: 1px solid #dde4f5;
+}
+.pro-box { border-left: 4px solid #059669; }
+.con-box { border-left: 4px solid #f59e0b; }
+.pro-box h4 { color: #065f46; }
+.con-box h4 { color: #92400e; }
+.flow-step {
+  display: flex; align-items: center; gap: 12px;
+  background: white; border: 1px solid #d1fae5; border-radius: 8px;
+  padding: 12px 16px; margin: 8px 0;
+}
+.flow-num {
+  background: #059669; color: white; border-radius: 4px;
+  width: 28px; height: 28px; display: flex; align-items: center;
+  justify-content: center; font-weight: 700; font-size: 0.85em; flex-shrink: 0;
+}
+.flow-content { flex: 1; }
+.flow-title { font-weight: 700; color: #065f46; font-size: 0.93em; }
+.flow-desc { font-size: 0.83em; color: #555; }
+.flow-tool { font-size: 0.78em; color: #059669; background: #ecfdf5;
+             padding: 1px 6px; border-radius: 3px; border: 1px solid #b5e5c5; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>方案 B — Dify 低代码平台</h1>
+  <div class="sub">Dify-Based Low-Code Stack &nbsp;·&nbsp; 3-4 周上线，1 人可维护</div>
+  <div class="meta">2026-04-21 &nbsp;·&nbsp; 三消知识库系统设计</div>
+  <div class="badges">
+    <span class="badge">Dify 自托管</span>
+    <span class="badge">Obsidian Wiki</span>
+    <span class="badge">Docusaurus 发布</span>
+    <span class="badge">Hybrid Search</span>
+    <span class="badge">Workflow RAG</span>
+    <span class="badge">多用户 Workspace</span>
+  </div>
+  <div class="recommended">⭐ 强烈推荐：最快上线、功能完整、1 人可运维</div>
+</div>
+<div class="nav">
+  <a href="overview.html">← 返回总览</a>
+  <a href="solution-a-fullstack.html">方案 A: 全栈自研</a>
+  <a href="solution-c-ragflow.html">方案 C: RAGFlow</a>
+  <a href="solution-d-lightweight.html">方案 D: 轻量栈</a>
+</div>
+
+<div class="container">
+
+<blockquote>
+  <strong>核心优势：</strong> Dify 是目前最成熟的开源 LLM 应用平台，内置知识库管理、混合检索、Workflow 编排、多用户权限、API 发布，自托管一个 Docker Compose 命令即可启动。配合 Obsidian（Wiki 编辑）+ Docusaurus（对外发布），形成完整闭环，无需从零开发任何后端服务。
+</blockquote>
+
+<h2>一、整体架构</h2>
+
+<pre>
+┌────────────────────────────────────────────────────────────────────┐
+│                          内容创作层                                  │
+│  Obsidian（本地 Vault）                                              │
+│  ├── Wiki 页面编辑（Markdown + frontmatter + [[wikilink]]）          │
+│  ├── Obsidian Web Clipper（浏览器插件，随手收集原始资料到 raw/）       │
+│  └── Dataview 插件（统计数据丰富度、追踪 status=draft 页面）          │
+└──────────────────────┬─────────────────────────────────────────────┘
+                       │ git push / sync
+┌──────────────────────▼─────────────────────────────────────────────┐
+│                     Dify 平台（自托管 Docker）                        │
+│                                                                     │
+│  ┌──────────────────┐  ┌────────────────────────────────────────┐  │
+│  │   Knowledge Base  │  │         Workflow / Chatflow             │  │
+│  │                  │  │                                        │  │
+│  │  ├ wiki 知识库    │  │  ┌─────────────────────────────────┐  │  │
+│  │  │  (Hybrid 检索) │  │  │   Adaptive Router               │  │  │
+│  │  ├ raw 知识库     │  │  │   ├── 简单问题 → 直接回答        │  │  │
+│  │  │  (原始资料)    │  │  │   ├── 标准问题 → Wiki RAG        │  │  │
+│  │  └ market 知识库  │  │  │   ├── 市场数据 → Market RAG      │  │  │
+│  │    (市场数据)     │  │  │   └── 复杂问题 → Multi-Agent     │  │  │
+│  │                  │  │  └─────────────────────────────────┘  │  │
+│  │  Hybrid Search:  │  │   ↓ CRAG 质检                         │  │
+│  │  向量 + 关键词   │  │   ↓ Reranking                         │  │
+│  │  + Reranking     │  │   ↓ 来源引用生成                       │  │
+│  └──────────────────┘  └────────────────────────────────────────┘  │
+│                                                                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
+│  │ 用户管理  │  │  API Key │  │ 对话历史  │  │   摄入 Pipeline   │  │
+│  │ (RBAC)   │  │  管理    │  │  (存储)   │  │  (Workflow)       │  │
+│  └──────────┘  └──────────┘  └──────────┘  └───────────────────┘  │
+└─────────────────────────┬──────────────────────────────────────────┘
+                          │  Dify API
+         ┌────────────────┴─────────────────┐
+         │                                   │
+┌────────▼──────────┐            ┌──────────▼──────────┐
+│  Docusaurus 站点   │            │  嵌入式 Q&A 悬浮窗   │
+│  (对外公开 Wiki)   │            │  (iframe / JS SDK)  │
+│  GitHub Pages 托管 │            │  嵌入在 Wiki 页面中  │
+└───────────────────┘            └────────────────────-┘
+</pre>
+
+<hr>
+
+<h2>二、Dify 知识库配置（高召回率方案）</h2>
+
+<h3>2.1 知识库分区设计</h3>
+
+<table>
+<thead><tr><th>知识库名称</th><th>内容</th><th>检索策略</th><th>分块策略</th></tr></thead>
+<tbody>
+<tr><td><strong>wiki-core</strong></td><td>wiki/ 下所有已编译的 Markdown 页面</td><td>Hybrid Search + Reranking</td><td>按 H2/H3 语义分块，Parent=完整页面</td></tr>
+<tr><td><strong>raw-gdc</strong></td><td>GDC 演讲 PDF（原始）</td><td>Hybrid Search，启用 PDF 图表提取</td><td>500 tokens，overlap=50，保留标题链路</td></tr>
+<tr><td><strong>raw-reports</strong></td><td>市场报告 PDF（Sensor Tower 等）</td><td>关键词为主 + 向量辅助</td><td>按表格/段落分块，表格整体保留</td></tr>
+<tr><td><strong>raw-web</strong></td><td>WebFetch 抓取的网页文章</td><td>Hybrid Search</td><td>语义分块</td></tr>
+<tr><td><strong>multimodal</strong></td><td>图表、截图、GDC 图片</td><td>Vision Embedding</td><td>图片 + GPT-4V 生成的文字描述双入库</td></tr>
+</tbody>
+</table>
+
+<h3>2.2 检索参数配置（Dify UI 可直接设置）</h3>
+
+<pre>
+知识库检索设置（Dify Settings → Knowledge Base）:
+  检索方式：混合检索（Hybrid）
+  向量模型：text-embedding-3-large 或 bge-m3
+  关键词权重：0.4（适合三消专有名词多的场景）
+  向量权重：0.6
+  Top K：60（初始召回量，后续 Reranking 再筛选）
+  Reranking 模型：cohere-rerank-v3 或 bge-reranker-v2-m3
+  Reranking Top N：8（最终送入 LLM 的文档数）
+  相关度阈值：0.3（CRAG 兜底触发阈值）
+</pre>
+
+<hr>
+
+<h2>三、Dify Workflow 设计（Q&A Pipeline）</h2>
+
+<h3>3.1 Adaptive RAG 主流程</h3>
+
+<div class="flow-step">
+  <div class="flow-num">1</div>
+  <div class="flow-content">
+    <div class="flow-title">问题分类路由 <span class="flow-tool">Dify: LLM Node → Condition Node</span></div>
+    <div class="flow-desc">LLM 判断问题类型：简单事实 / 机制设计 / 市场数据 / 跨域复杂问题。输出 category 字段。</div>
+  </div>
+</div>
+
+<div class="flow-step">
+  <div class="flow-num">2</div>
+  <div class="flow-content">
+    <div class="flow-title">Multi-Query 改写 <span class="flow-tool">Dify: LLM Node（并行）</span></div>
+    <div class="flow-desc">将原始问题改写为 3 个不同表述，并行检索后 RRF 融合。提升专有名词/口语化问题的召回率。</div>
+  </div>
+</div>
+
+<div class="flow-step">
+  <div class="flow-num">3</div>
+  <div class="flow-content">
+    <div class="flow-title">知识库检索 <span class="flow-tool">Dify: Knowledge Retrieval Node</span></div>
+    <div class="flow-desc">按问题 category 路由到对应知识库（wiki-core / raw-gdc / raw-reports）。Hybrid Search + Reranking 自动执行。</div>
+  </div>
+</div>
+
+<div class="flow-step">
+  <div class="flow-num">4</div>
+  <div class="flow-content">
+    <div class="flow-title">CRAG 质检 <span class="flow-tool">Dify: LLM Node + Condition Node</span></div>
+    <div class="flow-desc">检查召回内容相关度。若分数低于阈值（无相关文档）→ 触发 Web Search 工具兜底（Dify 内置 Google/Bing 搜索工具）。</div>
+  </div>
+</div>
+
+<div class="flow-step">
+  <div class="flow-num">5</div>
+  <div class="flow-content">
+    <div class="flow-title">答案生成 + 来源引用 <span class="flow-tool">Dify: LLM Node（Answer Node）</span></div>
+    <div class="flow-desc">基于过滤后的文档生成答案，强制输出引用来源（文件名 + 页码 + 数据时间）。System Prompt 包含 Self-RAG 质检指令。</div>
+  </div>
+</div>
+
+<div class="flow-step">
+  <div class="flow-num">6</div>
+  <div class="flow-content">
+    <div class="flow-title">幻觉自检（Self-RAG）<span class="flow-tool">Dify: LLM Node（可选）</span></div>
+    <div class="flow-desc">检查答案中的具体数字/断言是否有文档支撑。不支持的内容标注"待验证"而非直接呈现。</div>
+  </div>
+</div>
+
+<h3>3.2 多模态摄入 Workflow</h3>
+
+<pre>
+触发：用户上传文件（PDF/图片/URL）
+
+[文件类型判断]
+    ├── PDF → Dify PDF 解析器（含表格结构保留）
+    │         → 嵌入图片 → GPT-4V 生成图表描述
+    │         → 文字内容 + 图表描述 合并分块
+    │
+    ├── 图片（PNG/JPG）→ CLIP 向量化（进 multimodal 知识库）
+    │                  → GPT-4V 生成描述文字
+    │                  → 双路入库（向量 + 文字描述）
+    │
+    ├── URL → Jina AI Reader（Dify 内置）抓取正文
+    │        → 清洗 → 分块 → 进 raw-web 知识库
+    │
+    └── 视频 URL（YouTube）→ 调用外部 Whisper API 转录
+                           → 转录文字进 raw-gdc 知识库
+
+[自动 Wiki 编译（可选）]
+    → LLM 根据资料内容判断对应哪个 wiki 页面
+    → 生成 Markdown + frontmatter（data_richness 自评）
+    → 写入 wiki/ 目录（通过 Git API 或 Webhook 同步）
+</pre>
+
+<hr>
+
+<h2>四、Dify 多用户 + 权限配置</h2>
+
+<h3>4.1 Dify 内置权限体系</h3>
+<table>
+<thead><tr><th>Dify 角色</th><th>对应知识库角色</th><th>可做的事</th></tr></thead>
+<tbody>
+<tr><td><strong>Owner</strong></td><td>Super Admin</td><td>全部权限：管理成员、API Key、账单、所有知识库</td></tr>
+<tr><td><strong>Admin</strong></td><td>Editor</td><td>创建/编辑知识库；管理 Workflow；邀请成员</td></tr>
+<tr><td><strong>Member</strong></td><td>Contributor</td><td>使用已有应用；上传文档到知识库（需 Admin 审核）</td></tr>
+<tr><td><strong>API 访问</strong></td><td>Reader/API User</td><td>通过 API Key 调用 Q&A 接口（嵌入 Docusaurus）</td></tr>
+</tbody>
+</table>
+
+<h3>4.2 多工作空间方案</h3>
+<blockquote>
+  Dify 企业版支持多 Workspace。社区版（自托管）可通过以下方式实现隔离：
+</blockquote>
+<li>按知识库分权：不同用户组只能访问各自的知识库分区</li>
+<li>按 App 分权：为不同角色创建不同 Dify App（Editor App vs Reader App）</li>
+<li>多实例部署：如果需要完全隔离，部署多个 Dify 实例，用 Nginx 路由</li>
+
+<hr>
+
+<h2>五、Obsidian Wiki 层</h2>
+
+<h3>5.1 Obsidian 插件配置</h3>
+<table>
+<thead><tr><th>插件</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td><strong>Obsidian Web Clipper</strong></td><td>浏览器插件，一键收集网页到 raw/ 目录</td></tr>
+<tr><td><strong>Dataview</strong></td><td>SQL 式查询：列出所有 status=draft 的页面、data_richness 统计</td></tr>
+<tr><td><strong>Templater</strong></td><td>Wiki 页面模板（自动填充 frontmatter 必填字段，减少遗漏）</td></tr>
+<tr><td><strong>Git</strong></td><td>自动同步到 GitHub，触发 Docusaurus 构建和 Dify 知识库更新</td></tr>
+<tr><td><strong>Local REST API</strong></td><td>暴露本地 REST API，允许外部脚本写入 Obsidian Vault</td></tr>
+<tr><td><strong>Excalidraw</strong></td><td>在 Wiki 页面内绘制设计图（流程图/棋盘示意图）</td></tr>
+</tbody>
+</table>
+
+<h3>5.2 Obsidian → Dify 自动同步</h3>
+<pre>
+# GitHub Actions（.github/workflows/sync-to-dify.yml）
+
+触发：git push 到 main 分支（wiki/ 目录有变动）
+
+步骤：
+  1. 检测变动的 .md 文件列表
+  2. 对每个变动文件：
+     a. 读取文件内容 + frontmatter
+     b. 调用 Dify Knowledge Base API 更新/新增文档
+        PUT /v1/datasets/{dataset_id}/documents/{doc_id}
+     c. 如果文件被删除，同步删除 Dify 中的对应文档
+  3. 触发 Docusaurus 构建（自动发布到 GitHub Pages / Vercel）
+
+# 同步脚本伪代码
+for changed_file in get_changed_files("wiki/"):
+    content = read_file(changed_file)
+    frontmatter = parse_frontmatter(content)
+    dify_client.upsert_document(
+        dataset_id = WIKI_DATASET_ID,
+        name = changed_file,
+        content = content,
+        metadata = {
+            "type": frontmatter.type,
+            "status": frontmatter.status,
+            "data_richness": frontmatter.data_richness,
+            "last_updated": frontmatter.last_updated
+        }
+    )
+</pre>
+
+<hr>
+
+<h2>六、Docusaurus 对外 Wiki 站</h2>
+
+<h3>6.1 嵌入 Dify Q&A</h3>
+<pre>
+// docusaurus.config.js — 全站注入 Dify 悬浮对话窗
+scripts: [
+  {
+    src: 'https://your-dify.com/embed.min.js',
+    id: 'match3-wiki-bot',
+    'data-token': process.env.DIFY_PUBLIC_TOKEN,
+    defer: true,
+  }
+]
+
+// 效果：所有 Wiki 页面右下角出现悬浮聊天按钮
+// 点击展开，自动携带当前页面 URL 作为上下文
+// 可问"这个机制在哪些游戏中有实现？""这个数据的来源是哪里？"
+</pre>
+
+<h3>6.2 页面内嵌 Q&A 组件</h3>
+<pre>
+// 在 Wiki 页面 Markdown 中直接嵌入
+import DifyQA from '@site/src/components/DifyQA';
+
+&lt;DifyQA
+  context="mechanics/special-pieces"
+  placeholder="问问关于特殊棋子的设计问题..."
+/&gt;
+</pre>
+
+<hr>
+
+<h2>七、GraphRAG 补充方案</h2>
+
+<blockquote>
+  Dify 不原生支持 GraphRAG，但可以通过以下方式补充多跳推理能力：
+</blockquote>
+
+<h3>7.1 方案：Dify + 外部 GraphRAG 工具节点</h3>
+<pre>
+在 Dify Workflow 中增加一个 HTTP Request 节点：
+
+[问题实体识别] — LLM Node：从问题中提取实体（游戏/公司/机制名）
+       ↓
+[Graph 查询] — HTTP Node：
+  POST http://graphify-service/query
+  {
+    "entities": ["Royal Match", "special pieces"],
+    "hops": 2
+  }
+  返回：相关子图摘要文字
+       ↓
+[合并图谱结果 + 向量检索结果] — LLM Node：综合两路证据生成答案
+</pre>
+
+<h3>7.2 Graphify 部署（PRD 已规划）</h3>
+<pre>
+# 同 Docker Compose 启动 Graphify
+  graphify:
+    image: safishamsi/graphify:latest
+    volumes:
+      - ./wiki:/wiki
+    command: graphify serve --wiki /wiki --port 8001
+
+# Dify 中注册为工具（Tool）
+  工具名：graph_search
+  URL：http://graphify:8001/query
+  参数：entities（实体列表）, hops（跳数，默认 2）
+</pre>
+
+<hr>
+
+<h2>八、完整部署方案</h2>
+
+<h3>8.1 docker-compose.yml</h3>
+<pre>
+version: '3.8'
+services:
+  # Dify 核心（自带 PostgreSQL + Redis + Nginx）
+  dify:
+    image: langgenius/dify:latest
+    ports: ["3000:3000"]
+    volumes:
+      - ./dify-data:/app/api/storage
+    environment:
+      SECRET_KEY: your-secret-key
+      DIFY_PORT: 3000
+
+  # Graphify — 知识图谱服务（可选但推荐）
+  graphify:
+    image: safishamsi/graphify:latest
+    volumes:
+      - ./wiki:/wiki:ro
+    ports: ["8001:8001"]
+    command: graphify serve --wiki /wiki
+
+  # Nginx 反向代理
+  nginx:
+    image: nginx:alpine
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+
+# 可选：本地 bge-m3 embedding 服务（零 API 费用）
+  embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+    command: --model-id BAAI/bge-m3
+    ports: ["8080:80"]
+</pre>
+
+<h3>8.2 费用估算</h3>
+<table>
+<thead><tr><th>项目</th><th>方案</th><th>月费用</th></tr></thead>
+<tbody>
+<tr><td>VPS（Dify 主机）</td><td>4核8G（Hetzner / Vultr）</td><td>$25-40</td></tr>
+<tr><td>LLM API</td><td>Claude API（按量）<br><strong>启用 Prompt Caching 可节省 60-80%</strong></td><td>$8-25（缓存后）</td></tr>
+<tr><td>Embedding</td><td>bge-m3 本地部署（零成本）<br>或 OpenAI text-embedding-3-small</td><td>$0 / $5-15</td></tr>
+<tr><td>Reranker</td><td>bge-reranker 本地（推荐）<br>或 Cohere reranker</td><td>$0 / $10-30</td></tr>
+<tr><td>Docusaurus 托管</td><td>Vercel / GitHub Pages</td><td>$0</td></tr>
+<tr><td>域名 + SSL</td><td>Cloudflare</td><td>$10/年 ≈ $1/月</td></tr>
+<tr><td><strong>合计</strong></td><td>本地模型优先方案</td><td><strong>$46-101/月</strong></td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>八·五、CAG / Prompt Caching 成本优化</h2>
+
+<blockquote>
+  <strong>来源：repo-deep-dive 的 CAG 研究结论。</strong> 三消知识库的 System Prompt + 静态 wiki 摘要属于「高度重复的静态上下文」，完全符合 Prompt Caching 的适用条件。实测 API 成本可下降 60-80%。
+</blockquote>
+
+<h3>4 层 Prompt 结构（Claude cache_control）</h3>
+<pre>
+[Layer 1 — 永久缓存，极少变]           ← cache_control: ephemeral（首次后自动入 KV）
+  System prompt：角色设定、回答规则、引用格式要求
+  全局 wiki 摘要（~2000 tokens）：核心机制关键词表、游戏名称标准化列表
+
+[Layer 2 — 每日更新，每天缓存 1 次]    ← cache_control: ephemeral（daily rebuild）
+  今日新增/变更的 wiki 页面摘要
+  市场数据快照（最新日期的数字概要）
+
+[Layer 3 — 每次查询，动态构建]         ← 不缓存，按查询实时检索
+  当前问题检索到的 Top-5 文档片段
+  当前对话历史（最近 6 轮）
+
+[Layer 4 — 用户输入]
+  用户当前问题
+</pre>
+
+<h3>在 Dify Workflow 中实现</h3>
+<pre>
+# Dify System Prompt 节点 — 使用 Jinja2 模板分层注入
+# 注：Dify 调用 Claude API 时自动传递 cache_control，
+#     需在 Dify Model Provider 配置中开启 "Enable Prompt Cache"
+
+System Prompt 模板：
+---
+[ROLE]
+You are a Match-3 game industry expert assistant. ...
+[/ROLE]
+
+[STATIC_WIKI_SUMMARY]  {# 每日从 wiki/ 编译一次，约 1500 tokens #}
+{{ static_wiki_summary }}
+[/STATIC_WIKI_SUMMARY]
+---
+# ↑ 以上内容加 cache_control，首次调用后进入 KV 缓存
+# 后续调用只需计算 [DYNAMIC_CONTEXT] 以下的 tokens
+
+[DYNAMIC_CONTEXT]
+{{ retrieved_passages }}
+[/DYNAMIC_CONTEXT]
+
+[CONVERSATION]
+{{ chat_history }}
+[/CONVERSATION]
+</pre>
+
+<h3>成本对比（以每月 5000 次查询为例）</h3>
+<table>
+<thead><tr><th>场景</th><th>输入 tokens/次</th><th>月费用（Claude Sonnet）</th></tr></thead>
+<tbody>
+<tr><td>无缓存（原始）</td><td>~4000</td><td>~$48</td></tr>
+<tr><td>启用 Prompt Cache（Layer 1-2 命中）</td><td>~800（动态部分）</td><td><strong>~$10</strong></td></tr>
+<tr><td>节省</td><td>-80%</td><td><strong>节省 ~$38/月</strong></td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>九、实施步骤（3-4 周）</h2>
+
+<div class="step-card">
+  <span class="step-num">1</span><span class="step-title">第 1-3 天：Dify 部署 + 知识库初始化</span>
+  <ul style="margin-top:8px">
+    <li>VPS 上 docker-compose up 启动 Dify</li>
+    <li>创建 5 个知识库分区（wiki-core / raw-gdc / raw-reports / raw-web / multimodal）</li>
+    <li>配置 Hybrid Search + Reranking 参数</li>
+    <li>上传冷启动种子资料（PRD 第十节清单中的 14 份）</li>
+  </ul>
+</div>
+
+<div class="step-card">
+  <span class="step-num">2</span><span class="step-title">第 4-7 天：Workflow 搭建</span>
+  <ul style="margin-top:8px">
+    <li>在 Dify 可视化界面搭建 Adaptive RAG Workflow</li>
+    <li>配置 Multi-Query 改写节点（3 个查询变体）</li>
+    <li>配置 CRAG 质检 + Web Search 兜底节点</li>
+    <li>测试问答效果，调整 Top K / Reranking 参数</li>
+  </ul>
+</div>
+
+<div class="step-card">
+  <span class="step-num">3</span><span class="step-title">第 8-14 天：Obsidian + Git 集成</span>
+  <ul style="margin-top:8px">
+    <li>配置 Obsidian Vault 目录结构（对应 PRD wiki/ 结构）</li>
+    <li>安装必要插件（Templater / Dataview / Git）</li>
+    <li>编写 GitHub Actions 同步脚本（wiki 变动 → Dify 知识库更新）</li>
+    <li>设置 Docusaurus 站点，连接 GitHub 自动构建</li>
+  </ul>
+</div>
+
+<div class="step-card">
+  <span class="step-num">4</span><span class="step-title">第 15-21 天：多模态 + 多用户</span>
+  <ul style="margin-top:8px">
+    <li>配置 PDF 摄入 Workflow（含图表描述提取）</li>
+    <li>配置图片摄入 Workflow（CLIP + GPT-4V 双路）</li>
+    <li>邀请团队成员，配置权限</li>
+    <li>在 Docusaurus 嵌入 Dify 悬浮 Q&A 组件</li>
+  </ul>
+</div>
+
+<div class="step-card">
+  <span class="step-num">5</span><span class="step-title">第 22-28 天：GraphRAG + 优化</span>
+  <ul style="margin-top:8px">
+    <li>部署 Graphify 服务，生成初始知识图谱</li>
+    <li>在 Dify Workflow 中注册 graph_search 工具</li>
+    <li>A/B 测试不同 RAG 策略的召回效果</li>
+    <li>正式上线，开始 Phase 1 内容建设</li>
+  </ul>
+</div>
+
+<div class="pro-con">
+  <div class="pro-box">
+    <h4>✅ 优势</h4>
+    <ul>
+      <li>3-4 周可上线，1 人维护</li>
+      <li>Dify 界面调整 RAG 参数无需写代码</li>
+      <li>内置多用户、API 管理、对话历史</li>
+      <li>Hybrid Search + Reranking 开箱即用</li>
+      <li>完整 Workflow 可视化编排</li>
+      <li>社区活跃，问题易找到解答</li>
+      <li>月费用仅需 $46-101（启用 Prompt Cache 可降至 $33-66）</li>
+    </ul>
+  </div>
+  <div class="con-box">
+    <h4>⚠️ 局限</h4>
+    <ul>
+      <li>GraphRAG 需要外接 Graphify 服务</li>
+      <li>UI 定制受 Dify 框架限制</li>
+      <li>如果 Dify 版本升级有 Breaking Change，需要迁移</li>
+      <li>大规模用户（1000+）需要升级 VPS 配置</li>
+    </ul>
+  </div>
+</div>
+
+<hr>
+<p style="text-align:center;color:#888;font-size:0.85em;margin-top:40px;">
+  <a href="overview.html">← 返回总览</a> &nbsp;·&nbsp;
+  <a href="solution-c-ragflow.html">方案 C: RAGFlow →</a>
+</p>
+
+</div>
+</body>
+</html>

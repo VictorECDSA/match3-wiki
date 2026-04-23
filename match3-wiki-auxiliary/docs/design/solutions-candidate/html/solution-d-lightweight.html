@@ -1,0 +1,1812 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案 D — 轻量本地栈 | Match-3 知识库设计</title>
+<style>
+  :root {
+    --primary: #5c5c8a;
+    --primary-dark: #3a3a5c;
+    --primary-light: #8080b0;
+    --accent: #9090c8;
+    --accent2: #c8c8f0;
+    --bg: #0f0f1a;
+    --bg2: #16162a;
+    --bg3: #1e1e38;
+    --card: #1a1a30;
+    --border: #3a3a5c;
+    --text: #e0e0f0;
+    --text2: #a0a0c0;
+    --text3: #6868a0;
+    --success: #4caf50;
+    --warning: #ff9800;
+    --info: #2196f3;
+    --tag-bg: #2a2a4a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+
+  /* ── Nav ── */
+  .nav {
+    background: linear-gradient(90deg, #3a3a5c, #5c5c8a);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 52px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+  }
+  .nav a {
+    color: rgba(255,255,255,0.75);
+    text-decoration: none;
+    font-size: 13px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+  .nav a:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  .nav .sep { color: rgba(255,255,255,0.3); }
+  .nav .current { color: #fff; font-weight: 600; }
+  .nav-right { margin-left: auto; display: flex; gap: 6px; }
+  .nav-right a {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  .nav-right a:hover { background: rgba(255,255,255,0.2); }
+
+  /* ── Hero ── */
+  .hero {
+    background: linear-gradient(135deg, #1e1e38 0%, #2a2a4a 40%, #3a3a60 100%);
+    padding: 64px 32px 56px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse at center, rgba(144,144,200,0.06) 0%, transparent 60%);
+  }
+  .hero-badge {
+    display: inline-block;
+    background: rgba(144,144,200,0.15);
+    border: 1px solid rgba(144,144,200,0.4);
+    color: var(--accent2);
+    padding: 4px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: 2.6rem;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 12px;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero .subtitle {
+    font-size: 1.15rem;
+    color: var(--text2);
+    max-width: 620px;
+    margin: 0 auto 32px;
+  }
+  .hero-tags { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .hero-tag {
+    background: var(--tag-bg);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+  }
+  .hero-tag.highlight {
+    background: rgba(92,92,138,0.3);
+    border-color: var(--primary-light);
+    color: var(--accent2);
+    font-weight: 600;
+  }
+
+  /* ── Layout ── */
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .section { padding: 56px 0; border-bottom: 1px solid var(--border); }
+  .section:last-child { border-bottom: none; }
+  .section-header { margin-bottom: 32px; }
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--primary-light);
+    margin-bottom: 8px;
+  }
+  .section-title {
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 10px;
+  }
+  .section-desc { color: var(--text2); max-width: 680px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .card-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title .icon { font-size: 1.2rem; }
+  .card p { color: var(--text2); font-size: 14px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  @media (max-width: 768px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  /* ── Quick Stats ── */
+  .stats-bar {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    gap: 48px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .stat { text-align: center; }
+  .stat-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--accent);
+  }
+  .stat-label { font-size: 12px; color: var(--text3); margin-top: 2px; }
+
+  /* ── Architecture Diagram ── */
+  .arch-diagram {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .arch-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .arch-row:last-child { margin-bottom: 0; }
+  .arch-node {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 18px;
+    text-align: center;
+    min-width: 130px;
+  }
+  .arch-node .node-icon { font-size: 1.4rem; margin-bottom: 4px; }
+  .arch-node .node-name { font-size: 12px; font-weight: 700; color: #fff; }
+  .arch-node .node-tech { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .arch-node.primary { border-color: var(--primary-light); background: rgba(92,92,138,0.15); }
+  .arch-node.accent { border-color: var(--accent); background: rgba(144,144,200,0.1); }
+  .arch-arrow { color: var(--text3); font-size: 18px; font-weight: bold; }
+  .arch-layer-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text3);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .arch-divider {
+    border: none;
+    border-top: 1px dashed var(--border);
+    margin: 20px 0;
+  }
+
+  /* ── RAG Pipeline ── */
+  .pipeline {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .pipe-step {
+    flex: 1;
+    min-width: 120px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-right: none;
+    padding: 16px 12px;
+    position: relative;
+    text-align: center;
+  }
+  .pipe-step:first-child { border-radius: 8px 0 0 8px; }
+  .pipe-step:last-child { border-right: 1px solid var(--border); border-radius: 0 8px 8px 0; }
+  .pipe-step::after {
+    content: '▶';
+    position: absolute;
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--primary-light);
+    font-size: 14px;
+    z-index: 2;
+    background: var(--bg);
+    padding: 0 2px;
+  }
+  .pipe-step:last-child::after { display: none; }
+  .pipe-step .step-num {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--primary-light);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .pipe-step .step-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    margin: 4px 0;
+  }
+  .pipe-step .step-tech { font-size: 10px; color: var(--text3); }
+  .pipe-step.highlight { background: rgba(92,92,138,0.2); border-color: var(--primary-light); }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  thead tr { background: rgba(92,92,138,0.2); }
+  th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--accent2);
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 11px 16px;
+    border-bottom: 1px solid rgba(58,58,92,0.5);
+    color: var(--text2);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(92,92,138,0.06); }
+  td strong { color: var(--text); font-weight: 600; }
+  td code {
+    background: var(--tag-bg);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--accent2);
+  }
+
+  /* ── Code Block ── */
+  .code-wrap {
+    background: #0a0a14;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .code-header {
+    background: rgba(92,92,138,0.15);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent2);
+  }
+  .code-lang {
+    background: rgba(92,92,138,0.3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  pre {
+    padding: 20px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    color: #c8c8e8;
+  }
+  .kw { color: #9090d8; font-weight: bold; }
+  .fn { color: #80b0e0; }
+  .st { color: #80c080; }
+  .cm { color: #5a5a7a; font-style: italic; }
+  .nm { color: #d0a080; }
+  .op { color: #a0a0c0; }
+
+  /* ── Tags ── */
+  .tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin: 2px;
+  }
+  .tag-rag { background: rgba(92,92,138,0.3); color: var(--accent2); border: 1px solid var(--primary-light); }
+  .tag-free { background: rgba(76,175,80,0.15); color: #80d080; border: 1px solid rgba(76,175,80,0.4); }
+  .tag-local { background: rgba(33,150,243,0.15); color: #80b8f8; border: 1px solid rgba(33,150,243,0.4); }
+  .tag-phase { background: rgba(255,152,0,0.15); color: #ffc060; border: 1px solid rgba(255,152,0,0.4); }
+  .tag-limit { background: rgba(244,67,54,0.1); color: #f08080; border: 1px solid rgba(244,67,54,0.3); }
+
+  /* ── Pros/Cons ── */
+  .pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .pros-box {
+    background: rgba(76,175,80,0.05);
+    border: 1px solid rgba(76,175,80,0.2);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .cons-box {
+    background: rgba(244,67,54,0.05);
+    border: 1px solid rgba(244,67,54,0.15);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .box-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pros-box .box-title { color: #80d080; }
+  .cons-box .box-title { color: #f08080; }
+  .check-list { list-style: none; }
+  .check-list li {
+    padding: 5px 0;
+    font-size: 13px;
+    color: var(--text2);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .check-list li::before { flex-shrink: 0; margin-top: 2px; }
+  .pros-box .check-list li::before { content: '✓'; color: #80d080; font-weight: bold; }
+  .cons-box .check-list li::before { content: '✗'; color: #f08080; font-weight: bold; }
+
+  /* ── Timeline ── */
+  .timeline { position: relative; padding-left: 32px; }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--primary-light), var(--primary-dark));
+  }
+  .tl-item { position: relative; margin-bottom: 28px; }
+  .tl-item::before {
+    content: '';
+    position: absolute;
+    left: -28px;
+    top: 6px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--primary-light);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 2px var(--primary-dark);
+  }
+  .tl-phase {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--primary-light);
+    margin-bottom: 4px;
+  }
+  .tl-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .tl-desc { font-size: 13px; color: var(--text2); }
+  .tl-tasks {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .tl-task {
+    background: var(--tag-bg);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+
+  /* ── Notice Box ── */
+  .notice {
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .notice-info { background: rgba(33,150,243,0.08); border: 1px solid rgba(33,150,243,0.25); }
+  .notice-warn { background: rgba(255,152,0,0.08); border: 1px solid rgba(255,152,0,0.25); }
+  .notice-success { background: rgba(76,175,80,0.08); border: 1px solid rgba(76,175,80,0.25); }
+  .notice-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+  .notice-body { font-size: 13.5px; color: var(--text2); }
+  .notice-body strong { color: var(--text); }
+
+  /* ── Migration Box ── */
+  .migration-path {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+  }
+  .migrate-step {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(58,58,92,0.4);
+  }
+  .migrate-step:last-child { border-bottom: none; }
+  .migrate-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(92,92,138,0.3);
+    border: 1px solid var(--primary-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent2);
+    flex-shrink: 0;
+  }
+  .migrate-content { flex: 1; }
+  .migrate-title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 3px; }
+  .migrate-desc { font-size: 13px; color: var(--text2); }
+  .migrate-arrow { color: var(--text3); font-size: 20px; }
+
+  /* ── Footer ── */
+  .footer {
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    padding: 32px;
+    text-align: center;
+    color: var(--text3);
+    font-size: 13px;
+  }
+  .footer a { color: var(--primary-light); text-decoration: none; }
+  .footer a:hover { color: var(--accent2); }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+  <a href="overview.html">📋 Overview</a>
+  <span class="sep">›</span>
+  <span class="current">方案 D — 轻量本地栈</span>
+  <div class="nav-right">
+    <a href="solution-a-fullstack.html">方案 A</a>
+    <a href="solution-b-dify.html">方案 B ⭐</a>
+    <a href="solution-c-ragflow.html">方案 C</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="container">
+    <div class="hero-badge">Solution D · Lightweight Local Stack</div>
+    <h1>轻量本地栈<br><span>零成本快速起步方案</span></h1>
+    <p class="subtitle">LlamaIndex + Chroma + Streamlit + MkDocs — 全部运行在本地，无需云账号，一天内完成部署，作为 Phase 1 最低摩擦切入点</p>
+    <div class="hero-tags">
+      <span class="hero-tag highlight">💰 零云端成本</span>
+      <span class="hero-tag highlight">⚡ 1-2 周上线</span>
+      <span class="hero-tag">🏠 完全本地化</span>
+      <span class="hero-tag">🔍 Hybrid Search</span>
+      <span class="hero-tag">📚 BGE 本地向量</span>
+      <span class="hero-tag">🛠 1 人可完成</span>
+    </div>
+  </div>
+</div>
+
+<!-- Stats Bar -->
+<div class="stats-bar">
+  <div class="stat">
+    <div class="stat-value">$0</div>
+    <div class="stat-label">月度云端费用</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">1-2 周</div>
+    <div class="stat-label">完整部署时间</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">1 人</div>
+    <div class="stat-label">所需开发人力</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">5 种</div>
+    <div class="stat-label">RAG 技术集成</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">100%</div>
+    <div class="stat-label">数据本地留存</div>
+  </div>
+</div>
+
+
+<!-- SECTION 1: Architecture -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Architecture</div>
+      <h2 class="section-title">整体架构：三层轻量结构</h2>
+      <p class="section-desc">所有组件运行在同一台开发机或内网服务器上，通过 Python 进程通信，无需 Docker Compose 编排（可选），最小化运维复杂度。</p>
+    </div>
+
+    <div class="arch-diagram">
+      <div class="arch-layer-label">📝 编辑层 · Content Layer</div>
+      <div class="arch-row">
+        <div class="arch-node primary">
+          <div class="node-icon">🗂️</div>
+          <div class="node-name">Obsidian Vault</div>
+          <div class="node-tech">match3-wiki/ Markdown</div>
+        </div>
+        <div class="arch-arrow">+</div>
+        <div class="arch-node primary">
+          <div class="node-icon">📁</div>
+          <div class="node-name">Raw Resources</div>
+          <div class="node-tech">PDF / Image / URL</div>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node">
+          <div class="node-icon">🔄</div>
+          <div class="node-name">Watcher Script</div>
+          <div class="node-tech">watchdog 文件监听</div>
+        </div>
+      </div>
+
+      <hr class="arch-divider">
+      <div class="arch-layer-label">🧠 RAG 引擎层 · LlamaIndex Core</div>
+      <div class="arch-row">
+        <div class="arch-node accent">
+          <div class="node-icon">📦</div>
+          <div class="node-name">Document Loader</div>
+          <div class="node-tech">SimpleDirectoryReader</div>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node accent">
+          <div class="node-icon">✂️</div>
+          <div class="node-name">Semantic Chunker</div>
+          <div class="node-tech">SemanticSplitterNodeParser</div>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node accent">
+          <div class="node-icon">🧮</div>
+          <div class="node-name">BGE Embedder</div>
+          <div class="node-tech">bge-m3 (local)</div>
+        </div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node primary">
+          <div class="node-icon">🗃️</div>
+          <div class="node-name">Hybrid Index</div>
+          <div class="node-tech">Chroma + BM25Retriever</div>
+        </div>
+      </div>
+
+      <hr class="arch-divider">
+      <div class="arch-layer-label">🖥 前端层 · Interface Layer</div>
+      <div class="arch-row">
+        <div class="arch-node primary">
+          <div class="node-icon">💬</div>
+          <div class="node-name">Streamlit Chat</div>
+          <div class="node-tech">问答 + 来源展示</div>
+        </div>
+        <div class="arch-arrow">+</div>
+        <div class="arch-node primary">
+          <div class="node-icon">📖</div>
+          <div class="node-name">MkDocs Site</div>
+          <div class="node-tech">Wiki 浏览 + 搜索</div>
+        </div>
+        <div class="arch-arrow">+</div>
+        <div class="arch-node">
+          <div class="node-icon">📊</div>
+          <div class="node-name">Admin Panel</div>
+          <div class="node-tech">Streamlit 摄入管理</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 2: RAG Pipeline -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">RAG Pipeline</div>
+      <h2 class="section-title">5 种 RAG 技术集成方案</h2>
+      <p class="section-desc">在轻量级框架内实现最核心的高召回技术，不引入外部 API 依赖，全部本地推理。</p>
+    </div>
+
+    <!-- Query Pipeline -->
+    <h3 style="color:#c8c8f0;font-size:1rem;margin-bottom:16px;">🔍 查询阶段 Pipeline</h3>
+    <div class="pipeline" style="margin-bottom:32px;">
+      <div class="pipe-step">
+        <div class="step-num">Step 1</div>
+        <div class="step-name">用户查询</div>
+        <div class="step-tech">自然语言</div>
+      </div>
+      <div class="pipe-step highlight">
+        <div class="step-num">Step 2</div>
+        <div class="step-name">Multi-Query</div>
+        <div class="step-tech">本地 LLM 生成 3 变体</div>
+      </div>
+      <div class="pipe-step highlight">
+        <div class="step-num">Step 3</div>
+        <div class="step-name">Hybrid Search</div>
+        <div class="step-tech">Chroma + BM25 → RRF</div>
+      </div>
+      <div class="pipe-step">
+        <div class="step-num">Step 4</div>
+        <div class="step-name">P-C Retrieval</div>
+        <div class="step-tech">小 chunk 匹配→大段返回</div>
+      </div>
+      <div class="pipe-step highlight">
+        <div class="step-num">Step 5</div>
+        <div class="step-name">BGE Reranker</div>
+        <div class="step-tech">精排 Top 5</div>
+      </div>
+      <div class="pipe-step">
+        <div class="step-num">Step 6</div>
+        <div class="step-name">生成答案</div>
+        <div class="step-tech">本地 Ollama LLM</div>
+      </div>
+    </div>
+
+    <!-- Ingestion Pipeline -->
+    <h3 style="color:#c8c8f0;font-size:1rem;margin-bottom:16px;">📥 摄入阶段 Pipeline</h3>
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="step-num">Step 1</div>
+        <div class="step-name">文件检测</div>
+        <div class="step-tech">watchdog 监听</div>
+      </div>
+      <div class="pipe-step">
+        <div class="step-num">Step 2</div>
+        <div class="step-name">解析提取</div>
+        <div class="step-tech">PyMuPDF / Pillow</div>
+      </div>
+      <div class="pipe-step highlight">
+        <div class="step-num">Step 3</div>
+        <div class="step-name">语义分块</div>
+        <div class="step-tech">SemanticSplitter</div>
+      </div>
+      <div class="pipe-step">
+        <div class="step-num">Step 4</div>
+        <div class="step-name">向量化</div>
+        <div class="step-tech">bge-m3 embedding</div>
+      </div>
+      <div class="pipe-step">
+        <div class="step-num">Step 5</div>
+        <div class="step-name">双路索引</div>
+        <div class="step-tech">Chroma + BM25 json</div>
+      </div>
+    </div>
+
+    <!-- RAG Tech Table -->
+    <div style="margin-top:40px;">
+      <table>
+        <thead>
+          <tr>
+            <th>RAG 技术</th>
+            <th>来自 yupi.md</th>
+            <th>本方案实现方式</th>
+            <th>召回提升</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Hybrid Search</strong></td>
+            <td><span class="tag tag-rag">✓ yupi 核心</span></td>
+            <td><code>ChromaRetriever</code> + <code>BM25Retriever</code> → <code>QueryFusionRetriever(RRF)</code></td>
+            <td>+25-35%</td>
+          </tr>
+          <tr>
+            <td><strong>Semantic Chunking</strong></td>
+            <td><span class="tag tag-rag">✓ yupi 核心</span></td>
+            <td><code>SemanticSplitterNodeParser</code>，threshold=0.85，bge-m3 作为 embed model</td>
+            <td>+15-20%</td>
+          </tr>
+          <tr>
+            <td><strong>Parent-Child Retrieval</strong></td>
+            <td><span class="tag tag-rag">✓ yupi 核心</span></td>
+            <td><code>AutoMergingRetriever</code> + <code>HierarchicalNodeParser</code>（512→128 tokens）</td>
+            <td>+10-15%</td>
+          </tr>
+          <tr>
+            <td><strong>Multi-Query RAG</strong></td>
+            <td><span class="tag tag-rag">✓ yupi 核心</span></td>
+            <td>Ollama 本地生成 3 个查询变体，<code>QueryFusionRetriever(mode=reciprocal_rerank)</code></td>
+            <td>+15-20%</td>
+          </tr>
+          <tr>
+            <td><strong>Reranking</strong></td>
+            <td><span class="tag tag-rag">✓ yupi 核心</span></td>
+            <td><code>SentenceTransformerRerank</code>，使用 <code>BAAI/bge-reranker-v2-m3</code>，Top N=5</td>
+            <td>+20-30%</td>
+          </tr>
+          <tr>
+            <td><strong>PageIndex（长文档推理检索）</strong></td>
+            <td><span class="tag tag-local">repo-deep-dive</span></td>
+            <td><code>pageindex</code> pip 包（VectifyAI Apache-2.0）；对 ≥20 页 PDF 构建章节树，LLM 推理导航定位段落，无需向量化</td>
+            <td>GDC PDF 精准率 +40%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 3: Core Code -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Core Implementation</div>
+      <h2 class="section-title">核心代码实现</h2>
+    </div>
+
+    <!-- Hybrid Search Setup -->
+    <div class="code-wrap">
+      <div class="code-header">
+        <span>hybrid_index.py — Hybrid Search + Reranker 核心配置</span>
+        <span class="code-lang">Python</span>
+      </div>
+      <pre><span class="kw">from</span> llama_index.core <span class="kw">import</span> VectorStoreIndex, StorageContext
+<span class="kw">from</span> llama_index.core.node_parser <span class="kw">import</span> SemanticSplitterNodeParser, HierarchicalNodeParser
+<span class="kw">from</span> llama_index.core.retrievers <span class="kw">import</span> AutoMergingRetriever, QueryFusionRetriever
+<span class="kw">from</span> llama_index.retrievers.bm25 <span class="kw">import</span> BM25Retriever
+<span class="kw">from</span> llama_index.vector_stores.chroma <span class="kw">import</span> ChromaVectorStore
+<span class="kw">from</span> llama_index.postprocessor.flag_embedding_reranker <span class="kw">import</span> FlagEmbeddingReranker
+<span class="kw">from</span> llama_index.embeddings.huggingface <span class="kw">import</span> HuggingFaceEmbedding
+<span class="kw">import</span> chromadb
+
+<span class="cm"># -- Embedding: local BGE-M3 (bilingual, 1024 dims) --</span>
+embed_model = <span class="fn">HuggingFaceEmbedding</span>(
+    model_name=<span class="st">"BAAI/bge-m3"</span>,
+    device=<span class="st">"mps"</span>,  <span class="cm"># use "cuda" on Linux GPU, "cpu" as fallback</span>
+    embed_batch_size=<span class="nm">32</span>
+)
+
+<span class="cm"># -- Vector store: persistent Chroma --</span>
+chroma_client = chromadb.<span class="fn">PersistentClient</span>(path=<span class="st">"./data/chroma_db"</span>)
+chroma_collection = chroma_client.<span class="fn">get_or_create_collection</span>(<span class="st">"match3_wiki"</span>)
+vector_store = <span class="fn">ChromaVectorStore</span>(chroma_collection=chroma_collection)
+
+<span class="cm"># -- Hierarchical chunker: parent 512t / child 128t --</span>
+node_parser = <span class="fn">HierarchicalNodeParser</span>(
+    chunk_sizes=[<span class="nm">512</span>, <span class="nm">128</span>],
+    chunk_overlap=<span class="nm">20</span>
+)
+
+<span class="cm"># -- Semantic splitter (overrides above for wiki docs) --</span>
+semantic_splitter = <span class="fn">SemanticSplitterNodeParser</span>(
+    buffer_size=<span class="nm">1</span>,
+    breakpoint_percentile_threshold=<span class="nm">85</span>,
+    embed_model=embed_model,
+)
+
+<span class="kw">def</span> <span class="fn">build_hybrid_retriever</span>(index, nodes, top_k=<span class="nm">60</span>):
+    <span class="cm">"""Build a Hybrid (vector + BM25) retriever with RRF fusion."""</span>
+    vector_retriever = index.<span class="fn">as_retriever</span>(similarity_top_k=top_k)
+    bm25_retriever = <span class="fn">BM25Retriever</span>.<span class="fn">from_defaults</span>(
+        nodes=nodes, similarity_top_k=top_k
+    )
+    hybrid = <span class="fn">QueryFusionRetriever</span>(
+        retrievers=[vector_retriever, bm25_retriever],
+        similarity_top_k=top_k,
+        num_queries=<span class="nm">3</span>,   <span class="cm"># Multi-Query: generate 3 variants</span>
+        mode=<span class="st">"reciprocal_rerank"</span>,
+        use_async=<span class="kw">True</span>,
+    )
+    return hybrid
+
+<span class="cm"># -- BGE Reranker: precision re-scoring --</span>
+reranker = <span class="fn">FlagEmbeddingReranker</span>(
+    model=<span class="st">"BAAI/bge-reranker-v2-m3"</span>,
+    top_n=<span class="nm">5</span>,
+    use_fp16=<span class="kw">True</span>,
+)
+
+<span class="cm"># -- Query Engine: retriever + reranker --</span>
+<span class="kw">def</span> <span class="fn">build_query_engine</span>(index, nodes, llm):
+    retriever = <span class="fn">build_hybrid_retriever</span>(index, nodes)
+    auto_merge = <span class="fn">AutoMergingRetriever</span>(retriever, index.storage_context)
+    <span class="kw">return</span> index.<span class="fn">as_query_engine</span>(
+        retriever=auto_merge,
+        node_postprocessors=[reranker],
+        llm=llm,
+        response_mode=<span class="st">"compact"</span>,
+    )</pre>
+    </div>
+
+    <!-- PageIndex for Long PDFs -->
+    <div class="code-wrap">
+      <div class="code-header">
+        <span>pageindex_retriever.py — 长 PDF 推理导航检索（第 4 条检索路径）</span>
+        <span class="code-lang">Python</span>
+      </div>
+      <pre><span class="cm"># pageindex: pip install pageindex  (VectifyAI, Apache-2.0)</span>
+<span class="cm"># Ideal for GDC talk PDFs >= 20 pages: builds chapter tree,</span>
+<span class="cm"># uses LLM to navigate to the relevant section — no chunking needed.</span>
+<span class="kw">from</span> pageindex <span class="kw">import</span> PageIndex
+<span class="kw">from</span> llama_index.core.schema <span class="kw">import</span> NodeWithScore, TextNode
+<span class="kw">import</span> fitz  <span class="cm"># PyMuPDF — page count check</span>
+
+<span class="nm">LONG_PDF_THRESHOLD</span> = <span class="nm">20</span>  <span class="cm"># pages; GDC talks typically 30-80 pages</span>
+
+<span class="kw">class</span> <span class="fn">PageIndexRetriever</span>:
+    <span class="cm">"""Wrapper around pageindex for retrieval inside LlamaIndex pipelines."""</span>
+
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, pdf_dir: <span class="fn">str</span>, llm_model: <span class="fn">str</span> = <span class="st">"qwen2.5:14b"</span>):
+        self.pdf_dir = pdf_dir
+        self.llm_model = llm_model
+        self._indexes: <span class="fn">dict</span>[<span class="fn">str</span>, PageIndex] = {}
+
+    <span class="kw">def</span> <span class="fn">_get_or_build</span>(self, pdf_path: <span class="fn">str</span>) -> PageIndex:
+        <span class="kw">if</span> pdf_path <span class="kw">not in</span> self._indexes:
+            idx = <span class="fn">PageIndex</span>(pdf_path, llm=self.llm_model)
+            idx.<span class="fn">build</span>()  <span class="cm"># builds chapter tree once, cached to disk</span>
+            self._indexes[pdf_path] = idx
+        <span class="kw">return</span> self._indexes[pdf_path]
+
+    <span class="kw">def</span> <span class="fn">retrieve</span>(self, query: <span class="fn">str</span>, top_k: <span class="fn">int</span> = <span class="nm">5</span>) -> <span class="fn">list</span>[NodeWithScore]:
+        <span class="cm">"""Query all indexed long PDFs, return matching passages."""</span>
+        results = []
+        <span class="kw">import</span> os
+        <span class="kw">for</span> fname <span class="kw">in</span> os.<span class="fn">listdir</span>(self.pdf_dir):
+            <span class="kw">if not</span> fname.<span class="fn">endswith</span>(<span class="st">".pdf"</span>):
+                <span class="kw">continue</span>
+            pdf_path = os.path.<span class="fn">join</span>(self.pdf_dir, fname)
+            <span class="cm"># Only use PageIndex for long PDFs</span>
+            <span class="kw">if</span> fitz.<span class="fn">open</span>(pdf_path).<span class="fn">page_count</span> &lt; <span class="nm">LONG_PDF_THRESHOLD</span>:
+                <span class="kw">continue</span>
+            idx = self.<span class="fn">_get_or_build</span>(pdf_path)
+            passages = idx.<span class="fn">query</span>(query, top_k=top_k)
+            <span class="kw">for</span> p <span class="kw">in</span> passages:
+                results.<span class="fn">append</span>(<span class="fn">NodeWithScore</span>(
+                    node=<span class="fn">TextNode</span>(
+                        text=p.text,
+                        metadata={
+                            <span class="st">"file_name"</span>: fname,
+                            <span class="st">"page"</span>: p.page_num,
+                            <span class="st">"section"</span>: p.section_title,
+                            <span class="st">"retrieval_method"</span>: <span class="st">"pageindex"</span>,
+                        }
+                    ),
+                    score=p.score,
+                ))
+        results.<span class="fn">sort</span>(key=<span class="kw">lambda</span> x: x.score, reverse=<span class="kw">True</span>)
+        <span class="kw">return</span> results[:top_k]
+
+
+<span class="kw">def</span> <span class="fn">build_query_engine_with_pageindex</span>(index, nodes, llm, pdf_dir: <span class="fn">str</span>):
+    <span class="cm">"""Extended query engine: hybrid retriever + PageIndex for long GDC PDFs."""</span>
+    <span class="kw">from</span> hybrid_index <span class="kw">import</span> build_hybrid_retriever, reranker
+    <span class="kw">from</span> llama_index.core.retrievers <span class="kw">import</span> RouterRetriever
+    <span class="kw">from</span> llama_index.core.tools <span class="kw">import</span> RetrieverTool
+
+    hybrid = <span class="fn">build_hybrid_retriever</span>(index, nodes)
+    page_idx = <span class="fn">PageIndexRetriever</span>(pdf_dir=pdf_dir, llm_model=<span class="st">"qwen2.5:14b"</span>)
+
+    <span class="cm"># Merge results from both paths before reranking</span>
+    <span class="kw">class</span> <span class="fn">MergedRetriever</span>:
+        <span class="kw">def</span> <span class="fn">retrieve</span>(self, query: <span class="fn">str</span>):
+            hybrid_results = hybrid.<span class="fn">retrieve</span>(query)
+            pi_results = page_idx.<span class="fn">retrieve</span>(query, top_k=<span class="nm">10</span>)
+            <span class="kw">return</span> hybrid_results + pi_results  <span class="cm"># reranker will re-score all</span>
+
+    <span class="kw">return</span> index.<span class="fn">as_query_engine</span>(
+        retriever=<span class="fn">MergedRetriever</span>(),
+        node_postprocessors=[reranker],
+        llm=llm,
+        response_mode=<span class="st">"compact"</span>,
+    )</pre>
+    </div>
+
+    <!-- Streamlit Chat UI -->
+    <div class="code-wrap">
+      <div class="code-header">
+        <span>app.py — Streamlit 问答界面（含来源展示）</span>
+        <span class="code-lang">Python</span>
+      </div>
+      <pre><span class="kw">import</span> streamlit <span class="kw">as</span> st
+<span class="kw">from</span> llama_index.llms.ollama <span class="kw">import</span> Ollama
+<span class="kw">from</span> hybrid_index <span class="kw">import</span> build_query_engine
+<span class="kw">from</span> auth <span class="kw">import</span> check_credentials   <span class="cm"># simple YAML-based auth</span>
+
+st.<span class="fn">set_page_config</span>(page_title=<span class="st">"Match-3 Knowledge Base"</span>, layout=<span class="st">"wide"</span>)
+
+<span class="cm"># -- Authentication --</span>
+<span class="kw">if</span> <span class="st">"authenticated"</span> <span class="kw">not in</span> st.session_state:
+    <span class="kw">with</span> st.<span class="fn">form</span>(<span class="st">"login"</span>):
+        user = st.<span class="fn">text_input</span>(<span class="st">"Username"</span>)
+        pwd = st.<span class="fn">text_input</span>(<span class="st">"Password"</span>, type=<span class="st">"password"</span>)
+        <span class="kw">if</span> st.<span class="fn">form_submit_button</span>(<span class="st">"Login"</span>):
+            role = <span class="fn">check_credentials</span>(user, pwd)
+            <span class="kw">if</span> role:
+                st.session_state.authenticated = <span class="kw">True</span>
+                st.session_state.user = user
+                st.session_state.role = role
+                st.<span class="fn">rerun</span>()
+            <span class="kw">else</span>:
+                st.<span class="fn">error</span>(<span class="st">"Invalid credentials"</span>)
+    st.<span class="fn">stop</span>()
+
+<span class="cm"># -- Load query engine (cached) --</span>
+<span class="op">@</span>st.<span class="fn">cache_resource</span>
+<span class="kw">def</span> <span class="fn">get_engine</span>():
+    llm = <span class="fn">Ollama</span>(model=<span class="st">"qwen2.5:14b"</span>, request_timeout=<span class="nm">120</span>)
+    index, nodes = <span class="fn">load_index</span>()          <span class="cm"># loads from ./data/chroma_db</span>
+    <span class="kw">return</span> <span class="fn">build_query_engine</span>(index, nodes, llm)
+
+engine = <span class="fn">get_engine</span>()
+
+<span class="cm"># -- Chat UI --</span>
+st.<span class="fn">title</span>(<span class="st">"🎮 Match-3 Knowledge Base Q&A"</span>)
+st.<span class="fn">caption</span>(<span class="st">f"Logged in as: {st.session_state.user} ({st.session_state.role})"</span>)
+
+<span class="kw">if</span> <span class="st">"messages"</span> <span class="kw">not in</span> st.session_state:
+    st.session_state.messages = []
+
+<span class="kw">for</span> msg <span class="kw">in</span> st.session_state.messages:
+    <span class="kw">with</span> st.<span class="fn">chat_message</span>(msg[<span class="st">"role"</span>]):
+        st.<span class="fn">markdown</span>(msg[<span class="st">"content"</span>])
+
+<span class="kw">if</span> query := st.<span class="fn">chat_input</span>(<span class="st">"Ask about Match-3 mechanics, market data, competitors..."</span>):
+    st.session_state.messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: query})
+    <span class="kw">with</span> st.<span class="fn">chat_message</span>(<span class="st">"user"</span>):
+        st.<span class="fn">markdown</span>(query)
+
+    <span class="kw">with</span> st.<span class="fn">chat_message</span>(<span class="st">"assistant"</span>):
+        <span class="kw">with</span> st.<span class="fn">spinner</span>(<span class="st">"Searching knowledge base..."</span>):
+            response = engine.<span class="fn">query</span>(query)
+
+        st.<span class="fn">markdown</span>(<span class="fn">str</span>(response))
+
+        <span class="cm"># Show source documents</span>
+        <span class="kw">with</span> st.<span class="fn">expander</span>(<span class="st">f"📚 Sources ({len(response.source_nodes)} chunks)"</span>):
+            <span class="kw">for</span> i, node <span class="kw">in</span> <span class="fn">enumerate</span>(response.source_nodes):
+                meta = node.node.metadata
+                st.<span class="fn">markdown</span>(<span class="st">f"**[{i+1}] {meta.get('file_name', 'Unknown')}** (score: {node.score:.3f})"</span>)
+                st.<span class="fn">text</span>(node.node.text[:<span class="nm">300</span>] + <span class="st">"..."</span>)
+                st.<span class="fn">divider</span>()
+
+        st.session_state.messages.<span class="fn">append</span>({
+            <span class="st">"role"</span>: <span class="st">"assistant"</span>,
+            <span class="st">"content"</span>: <span class="fn">str</span>(response)
+        })</pre>
+    </div>
+
+    <!-- Watcher / Ingestion -->
+    <div class="code-wrap">
+      <div class="code-header">
+        <span>watcher.py — 文件监听自动摄入</span>
+        <span class="code-lang">Python</span>
+      </div>
+      <pre><span class="kw">from</span> watchdog.observers <span class="kw">import</span> Observer
+<span class="kw">from</span> watchdog.events <span class="kw">import</span> FileSystemEventHandler
+<span class="kw">from</span> ingestion <span class="kw">import</span> ingest_file
+<span class="kw">import</span> logging, time
+
+<span class="nm">WATCH_PATHS</span> = [
+    <span class="st">"./wiki"</span>,           <span class="cm"># Obsidian vault markdown files</span>
+    <span class="st">"./raw/pdf"</span>,        <span class="cm"># GDC talks, market reports</span>
+    <span class="st">"./raw/images"</span>,     <span class="cm"># screenshots, charts</span>
+]
+
+<span class="nm">SUPPORTED_EXTS</span> = {<span class="st">".md"</span>, <span class="st">".pdf"</span>, <span class="st">".png"</span>, <span class="st">".jpg"</span>, <span class="st">".jpeg"</span>}
+
+<span class="kw">class</span> <span class="fn">KnowledgeBaseHandler</span>(FileSystemEventHandler):
+    <span class="kw">def</span> <span class="fn">on_created</span>(self, event):
+        <span class="kw">if not</span> event.is_directory:
+            <span class="fn">self._process</span>(event.src_path)
+
+    <span class="kw">def</span> <span class="fn">on_modified</span>(self, event):
+        <span class="kw">if not</span> event.is_directory:
+            <span class="fn">self._process</span>(event.src_path)
+
+    <span class="kw">def</span> <span class="fn">_process</span>(self, path):
+        ext = path[path.<span class="fn">rfind</span>(<span class="st">'.'</span>):]
+        <span class="kw">if</span> ext <span class="kw">in</span> <span class="nm">SUPPORTED_EXTS</span>:
+            logging.<span class="fn">info</span>(<span class="st">f"Detected change: {path}"</span>)
+            <span class="kw">try</span>:
+                <span class="fn">ingest_file</span>(path)
+                logging.<span class="fn">info</span>(<span class="st">f"Ingested: {path}"</span>)
+            <span class="kw">except</span> Exception <span class="kw">as</span> e:
+                logging.<span class="fn">error</span>(<span class="st">f"Failed to ingest {path}: {e}"</span>)
+
+<span class="kw">if</span> __name__ == <span class="st">"__main__"</span>:
+    logging.<span class="fn">basicConfig</span>(level=logging.<span class="nm">INFO</span>)
+    observer = <span class="fn">Observer</span>()
+    <span class="kw">for</span> path <span class="kw">in</span> <span class="nm">WATCH_PATHS</span>:
+        observer.<span class="fn">schedule</span>(<span class="fn">KnowledgeBaseHandler</span>(), path, recursive=<span class="kw">True</span>)
+    observer.<span class="fn">start</span>()
+    logging.<span class="fn">info</span>(<span class="st">"Watching for file changes..."</span>)
+    <span class="kw">try</span>:
+        <span class="kw">while</span> <span class="kw">True</span>: time.<span class="fn">sleep</span>(<span class="nm">1</span>)
+    <span class="kw">finally</span>:
+        observer.<span class="fn">stop</span>()
+        observer.<span class="fn">join</span>()</pre>
+    </div>
+
+    <!-- Auth -->
+    <div class="code-wrap">
+      <div class="code-header">
+        <span>auth.py — 基于 YAML 的轻量多用户认证</span>
+        <span class="code-lang">Python</span>
+      </div>
+      <pre><span class="cm"># users.yaml structure:
+# users:
+#   alice:
+#     password_hash: "bcrypt_hash_here"
+#     role: admin        # admin | editor | reader
+#   bob:
+#     password_hash: "bcrypt_hash_here"
+#     role: reader</span>
+
+<span class="kw">import</span> yaml, bcrypt
+<span class="kw">from</span> pathlib <span class="kw">import</span> Path
+
+<span class="kw">def</span> <span class="fn">check_credentials</span>(username: <span class="fn">str</span>, password: <span class="fn">str</span>) -> <span class="fn">str</span> | <span class="kw">None</span>:
+    <span class="cm">"""Returns role string if valid, None if invalid."""</span>
+    config = yaml.<span class="fn">safe_load</span>(Path(<span class="st">"users.yaml"</span>).<span class="fn">read_text</span>())
+    user = config[<span class="st">"users"</span>].<span class="fn">get</span>(username)
+    <span class="kw">if not</span> user:
+        <span class="kw">return None</span>
+    pw_hash = user[<span class="st">"password_hash"</span>].<span class="fn">encode</span>()
+    <span class="kw">if</span> bcrypt.<span class="fn">checkpw</span>(password.<span class="fn">encode</span>(), pw_hash):
+        <span class="kw">return</span> user[<span class="st">"role"</span>]
+    <span class="kw">return None</span>
+
+<span class="kw">def</span> <span class="fn">can_edit</span>(role: <span class="fn">str</span>) -> <span class="fn">bool</span>:
+    <span class="kw">return</span> role <span class="kw">in</span> {<span class="st">"admin"</span>, <span class="st">"editor"</span>}
+
+<span class="kw">def</span> <span class="fn">can_ingest</span>(role: <span class="fn">str</span>) -> <span class="fn">bool</span>:
+    <span class="kw">return</span> role == <span class="st">"admin"</span></pre>
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 4: Tech Stack -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Tech Stack</div>
+      <h2 class="section-title">完整技术栈清单</h2>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>层级</th>
+          <th>组件</th>
+          <th>版本 / 规格</th>
+          <th>用途</th>
+          <th>成本</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>文档编辑</strong></td>
+          <td>Obsidian</td>
+          <td>1.7+</td>
+          <td>Wiki Markdown 编辑器</td>
+          <td><span class="tag tag-free">免费</span></td>
+        </tr>
+        <tr>
+          <td><strong>RAG 框架</strong></td>
+          <td>LlamaIndex</td>
+          <td>0.11+</td>
+          <td>文档加载、索引、查询引擎</td>
+          <td><span class="tag tag-free">免费</span></td>
+        </tr>
+        <tr>
+          <td><strong>向量数据库</strong></td>
+          <td>ChromaDB</td>
+          <td>0.5+, persistent</td>
+          <td>向量存储与检索</td>
+          <td><span class="tag tag-free">免费</span></td>
+        </tr>
+        <tr>
+          <td><strong>关键词检索</strong></td>
+          <td>BM25Retriever</td>
+          <td>llama-index-retrievers-bm25</td>
+          <td>BM25 关键词召回</td>
+          <td><span class="tag tag-free">免费</span></td>
+        </tr>
+        <tr>
+          <td><strong>Embedding 模型</strong></td>
+          <td>BGE-M3</td>
+          <td>BAAI/bge-m3 (1024d)</td>
+          <td>中英双语向量化</td>
+          <td><span class="tag tag-local">本地</span></td>
+        </tr>
+        <tr>
+          <td><strong>Reranker</strong></td>
+          <td>BGE-Reranker-v2-m3</td>
+          <td>BAAI/bge-reranker-v2-m3</td>
+          <td>精排 Cross-Encoder</td>
+          <td><span class="tag tag-local">本地</span></td>
+        </tr>
+        <tr>
+          <td><strong>LLM 推理</strong></td>
+          <td>Ollama</td>
+          <td>qwen2.5:14b 或 llama3.2:8b</td>
+          <td>本地 LLM 生成答案</td>
+          <td><span class="tag tag-local">本地</span></td>
+        </tr>
+        <tr>
+          <td><strong>问答 UI</strong></td>
+          <td>Streamlit</td>
+          <td>1.38+</td>
+          <td>Chat 界面 + 管理面板</td>
+          <td><span class="tag tag-free">免费</span></td>
+        </tr>
+        <tr>
+          <td><strong>Wiki 站点</strong></td>
+          <td>MkDocs Material</td>
+          <td>9.5+</td>
+          <td>静态 Wiki 浏览站</td>
+          <td><span class="tag tag-free">免费</span></td>
+        </tr>
+        <tr>
+          <td><strong>PDF 解析</strong></td>
+          <td>PyMuPDF</td>
+          <td>1.24+</td>
+          <td>PDF 文本 + 图片提取（短文档）</td>
+          <td><span class="tag tag-free">免费</span></td>
+        </tr>
+        <tr>
+          <td><strong>长文档检索</strong></td>
+          <td>pageindex</td>
+          <td>VectifyAI Apache-2.0</td>
+          <td>≥20 页 PDF 的章节树推理导航，零向量切块</td>
+          <td><span class="tag tag-free">免费</span></td>
+        </tr>
+        <tr>
+          <td><strong>图片理解</strong></td>
+          <td>LLaVA (via Ollama)</td>
+          <td>llava:13b</td>
+          <td>截图/图表描述生成</td>
+          <td><span class="tag tag-local">本地</span></td>
+        </tr>
+        <tr>
+          <td><strong>文件监听</strong></td>
+          <td>watchdog</td>
+          <td>4.0+</td>
+          <td>自动检测新文件触发摄入</td>
+          <td><span class="tag tag-free">免费</span></td>
+        </tr>
+        <tr>
+          <td><strong>认证</strong></td>
+          <td>YAML + bcrypt</td>
+          <td>手动维护 users.yaml</td>
+          <td>3 角色轻量权限控制</td>
+          <td><span class="tag tag-free">免费</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="notice notice-info" style="margin-top:24px;">
+      <span class="notice-icon">💻</span>
+      <div class="notice-body">
+        <strong>最低硬件要求：</strong> 16GB RAM (推荐 32GB) + M1/M2 Mac 或 NVIDIA GPU 8GB VRAM。BGE-M3 + Reranker 同时加载约占用 4-6GB 显存，qwen2.5:14b (Q4_K_M) 约需 8GB VRAM。若资源受限，可换用 <code>bge-small-zh-v1.5</code> + <code>qwen2.5:7b</code>。
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 5: MkDocs Setup -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Wiki Site</div>
+      <h2 class="section-title">MkDocs Wiki 站点配置</h2>
+      <p class="section-desc">将 Obsidian vault 直接作为 MkDocs docs/ 目录，一个命令生成静态 Wiki 站点，支持全文搜索和导航结构。</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="code-wrap" style="margin-bottom:0;">
+        <div class="code-header">
+          <span>mkdocs.yml — 站点配置</span>
+          <span class="code-lang">YAML</span>
+        </div>
+        <pre><span class="nm">site_name</span>: Match-3 Knowledge Base
+<span class="nm">site_description</span>: Internal wiki for Match-3 game industry
+<span class="nm">docs_dir</span>: wiki   <span class="cm"># points to Obsidian vault</span>
+<span class="nm">site_dir</span>: site
+
+<span class="nm">theme</span>:
+  <span class="nm">name</span>: material
+  <span class="nm">palette</span>:
+    - <span class="nm">scheme</span>: slate
+      <span class="nm">primary</span>: deep purple
+  <span class="nm">features</span>:
+    - navigation.tabs
+    - navigation.instant
+    - search.highlight
+    - content.code.copy
+
+<span class="nm">plugins</span>:
+  - search
+  - tags
+  - <span class="nm">roamlinks</span>:  <span class="cm"># Obsidian [[wikilinks]] support</span>
+      <span class="nm">enabled</span>: true
+
+<span class="nm">nav</span>:
+  - Home: index.md
+  - Mechanics: mechanics/
+  - Games: titles/
+  - Market: market/
+  - Growth: growth/
+  - History: history/
+
+<span class="nm">markdown_extensions</span>:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - tables
+  - toc: {<span class="nm">permalink</span>: true}</pre>
+      </div>
+
+      <div>
+        <div class="code-wrap" style="margin-bottom:16px;">
+          <div class="code-header">
+            <span>serve_wiki.sh — 本地预览</span>
+            <span class="code-lang">Bash</span>
+          </div>
+          <pre><span class="cm">#!/usr/bin/env bash</span>
+<span class="cm"># Serve MkDocs with live reload</span>
+mkdocs serve --dev-addr 0.0.0.0:8001 --watch wiki/</pre>
+        </div>
+        <div class="code-wrap" style="margin-bottom:0;">
+          <div class="code-header">
+            <span>build_wiki.sh — 构建静态站点</span>
+            <span class="code-lang">Bash</span>
+          </div>
+          <pre><span class="cm">#!/usr/bin/env bash</span>
+<span class="cm"># Build static site to ./site/</span>
+mkdocs build --clean --strict
+
+<span class="cm"># Optional: serve via nginx or Python</span>
+<span class="cm"># python -m http.server 8001 --directory site</span></pre>
+        </div>
+
+        <div class="notice notice-info" style="margin-top:16px;margin-bottom:0;">
+          <span class="notice-icon">📌</span>
+          <div class="notice-body">
+            <strong>访问地址：</strong><br>
+            问答 Chat：<code>http://localhost:8501</code><br>
+            Wiki 站点：<code>http://localhost:8001</code><br>
+            管理面板：<code>http://localhost:8501/admin</code>（Streamlit 多页）
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 6: Multimodal -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Multimodal Support</div>
+      <h2 class="section-title">多模态基础支持</h2>
+      <p class="section-desc">使用本地 LLaVA 模型为图片生成文字描述，将其作为可检索的文本节点加入向量索引。</p>
+    </div>
+
+    <div class="code-wrap">
+      <div class="code-header">
+        <span>ingestion.py — 多模态文件摄入路由</span>
+        <span class="code-lang">Python</span>
+      </div>
+      <pre><span class="kw">import</span> ollama
+<span class="kw">from</span> pathlib <span class="kw">import</span> Path
+<span class="kw">from</span> llama_index.core.schema <span class="kw">import</span> TextNode
+<span class="kw">import</span> fitz  <span class="cm"># PyMuPDF</span>
+<span class="kw">import</span> base64, json
+
+<span class="kw">def</span> <span class="fn">ingest_file</span>(file_path: <span class="fn">str</span>) -> <span class="fn">list</span>[TextNode]:
+    path = <span class="fn">Path</span>(file_path)
+    ext = path.suffix.<span class="fn">lower</span>()
+
+    <span class="kw">if</span> ext == <span class="st">".md"</span>:
+        <span class="kw">return</span> <span class="fn">ingest_markdown</span>(path)
+    <span class="kw">elif</span> ext == <span class="st">".pdf"</span>:
+        <span class="cm"># Route: long PDFs (>= 20 pages) → PageIndex; short PDFs → PyMuPDF chunks</span>
+        doc = fitz.<span class="fn">open</span>(file_path)
+        page_count = doc.<span class="fn">page_count</span>
+        doc.<span class="fn">close</span>()
+        <span class="kw">if</span> page_count &gt;= <span class="nm">20</span>:
+            <span class="cm"># PageIndex handles retrieval at query time — no upfront TextNodes needed</span>
+            <span class="kw">return</span> []  <span class="cm"># registered in PageIndexRetriever's pdf_dir scan</span>
+        <span class="kw">return</span> <span class="fn">ingest_pdf</span>(path)
+    <span class="kw">elif</span> ext <span class="kw">in</span> {<span class="st">".png"</span>, <span class="st">".jpg"</span>, <span class="st">".jpeg"</span>, <span class="st">".webp"</span>}:
+        <span class="kw">return</span> <span class="fn">ingest_image</span>(path)
+    <span class="kw">else</span>:
+        <span class="kw">raise</span> <span class="fn">ValueError</span>(<span class="st">f"Unsupported file type: {ext}"</span>)
+
+<span class="kw">def</span> <span class="fn">ingest_image</span>(path: Path) -> <span class="fn">list</span>[TextNode]:
+    <span class="cm">"""Use LLaVA to generate a text description for image retrieval."""</span>
+    <span class="kw">with</span> <span class="fn">open</span>(path, <span class="st">"rb"</span>) <span class="kw">as</span> f:
+        img_b64 = base64.<span class="fn">b64encode</span>(f.<span class="fn">read</span>()).<span class="fn">decode</span>()
+
+    prompt = (
+        <span class="st">"You are analyzing a Match-3 game screenshot or chart. "</span>
+        <span class="st">"Describe: (1) what type of content this is, (2) key UI elements or data shown, "</span>
+        <span class="st">"(3) any numbers, labels, or game mechanics visible. Be concise and factual."</span>
+    )
+    response = ollama.<span class="fn">chat</span>(
+        model=<span class="st">"llava:13b"</span>,
+        messages=[{
+            <span class="st">"role"</span>: <span class="st">"user"</span>,
+            <span class="st">"content"</span>: prompt,
+            <span class="st">"images"</span>: [img_b64]
+        }]
+    )
+    description = response[<span class="st">"message"</span>][<span class="st">"content"</span>]
+
+    <span class="kw">return</span> [<span class="fn">TextNode</span>(
+        text=description,
+        metadata={
+            <span class="st">"file_path"</span>: <span class="fn">str</span>(path),
+            <span class="st">"file_name"</span>: path.name,
+            <span class="st">"file_type"</span>: <span class="st">"image"</span>,
+            <span class="st">"source"</span>: <span class="st">"llava_description"</span>,
+        }
+    )]
+
+<span class="kw">def</span> <span class="fn">ingest_pdf</span>(path: Path) -> <span class="fn">list</span>[TextNode]:
+    <span class="cm">"""Extract text + embedded images from PDF via PyMuPDF."""</span>
+    doc = fitz.<span class="fn">open</span>(path)
+    nodes = []
+
+    <span class="kw">for</span> page_num, page <span class="kw">in</span> <span class="fn">enumerate</span>(doc):
+        text = page.<span class="fn">get_text</span>()
+        <span class="kw">if</span> text.<span class="fn">strip</span>():
+            nodes.<span class="fn">append</span>(<span class="fn">TextNode</span>(
+                text=text,
+                metadata={<span class="st">"file_name"</span>: path.name, <span class="st">"page"</span>: page_num + <span class="nm">1</span>}
+            ))
+        <span class="cm"># Extract embedded images and describe via LLaVA</span>
+        <span class="kw">for</span> img_info <span class="kw">in</span> page.<span class="fn">get_images</span>():
+            xref = img_info[<span class="nm">0</span>]
+            img_data = doc.<span class="fn">extract_image</span>(xref)
+            <span class="kw">if</span> img_data[<span class="st">"width"</span>] > <span class="nm">200</span>:  <span class="cm"># skip tiny icons</span>
+                <span class="cm"># Save temp, then call ingest_image</span>
+                <span class="kw">pass</span>  <span class="cm"># abbreviated for readability</span>
+
+    <span class="kw">return</span> nodes</pre>
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 7: Directory Structure -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Project Structure</div>
+      <h2 class="section-title">项目目录结构</h2>
+    </div>
+    <div class="code-wrap">
+      <div class="code-header">
+        <span>目录树</span>
+        <span class="code-lang">Tree</span>
+      </div>
+      <pre>match3-kb/
+├── wiki/                   <span class="cm"># Obsidian vault (same as MkDocs docs_dir)</span>
+│   ├── index.md
+│   ├── mechanics/
+│   ├── titles/
+│   ├── market/
+│   ├── growth/
+│   └── history/
+├── raw/                    <span class="cm"># raw resources to ingest</span>
+│   ├── pdf/                <span class="cm"># GDC talks, reports</span>
+│   ├── images/             <span class="cm"># screenshots, charts</span>
+│   └── urls.txt            <span class="cm"># URLs to crawl</span>
+├── data/
+│   ├── chroma_db/          <span class="cm"># ChromaDB persistent storage</span>
+│   ├── bm25_index.json     <span class="cm"># BM25 serialized index</span>
+│   └── pageindex_cache/    <span class="cm"># PageIndex chapter-tree cache (auto-created)</span>
+├── src/
+│   ├── app.py              <span class="cm"># Streamlit main chat page</span>
+│   ├── pages/
+│   │   └── admin.py        <span class="cm"># Streamlit admin panel</span>
+│   ├── hybrid_index.py     <span class="cm"># RAG core (vector + BM25)</span>
+│   ├── pageindex_retriever.py  <span class="cm"># PageIndex path for long GDC PDFs</span>
+│   ├── ingestion.py        <span class="cm"># Document loading & parsing</span>
+│   ├── watcher.py          <span class="cm"># File change watcher</span>
+│   └── auth.py             <span class="cm"># User authentication</span>
+├── mkdocs.yml
+├── users.yaml              <span class="cm"># User credentials (gitignore this!)</span>
+├── requirements.txt
+└── Makefile</pre>
+    </div>
+
+    <div class="code-wrap">
+      <div class="code-header">
+        <span>Makefile — 常用命令</span>
+        <span class="code-lang">Makefile</span>
+      </div>
+      <pre>install:
+	pip install -r requirements.txt
+	ollama pull qwen2.5:14b
+	ollama pull llava:13b
+
+ingest:
+	python src/ingestion.py --path ./raw
+
+watch:
+	python src/watcher.py
+
+chat:
+	streamlit run src/app.py --server.port 8501
+
+wiki:
+	mkdocs serve --dev-addr 0.0.0.0:8001
+
+<span class="cm"># Run chat + wiki + watcher in parallel</span>
+start:
+	make -j3 watch chat wiki</pre>
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 8: Timeline -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Implementation Plan</div>
+      <h2 class="section-title">1-2 周实施计划</h2>
+    </div>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-phase">Day 1-2</div>
+        <div class="tl-title">环境搭建 + 基础索引</div>
+        <div class="tl-desc">安装 Python 依赖，拉取 Ollama 模型（bge-m3 + reranker + qwen2.5:14b），初始化 ChromaDB，将现有 wiki/ 目录完成首次摄入并验证向量检索结果。</div>
+        <div class="tl-tasks">
+          <span class="tl-task">pip install requirements</span>
+          <span class="tl-task">ollama pull models</span>
+          <span class="tl-task">ChromaDB 初始化</span>
+          <span class="tl-task">首次批量摄入</span>
+          <span class="tl-task">基础检索验证</span>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-phase">Day 3-4</div>
+        <div class="tl-title">Hybrid Search + Reranker 集成</div>
+        <div class="tl-desc">配置 BM25Retriever + ChromaRetriever → QueryFusionRetriever(RRF)，集成 BGE-Reranker，实现 AutoMergingRetriever 父子节点回溯，跑 RAGAS 基础评测（5-10 个测试 Q&A 对）。</div>
+        <div class="tl-tasks">
+          <span class="tl-task">BM25 集成</span>
+          <span class="tl-task">RRF 融合</span>
+          <span class="tl-task">Reranker 配置</span>
+          <span class="tl-task">AutoMerging</span>
+          <span class="tl-task">RAGAS 初评</span>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-phase">Day 5-7</div>
+        <div class="tl-title">Streamlit Chat UI + 认证</div>
+        <div class="tl-desc">完成问答界面（含来源展示、对话历史），实现 YAML 用户认证（3 角色），搭建管理面板（摄入状态、手动触发、索引统计）。</div>
+        <div class="tl-tasks">
+          <span class="tl-task">Chat UI</span>
+          <span class="tl-task">来源展示</span>
+          <span class="tl-task">YAML Auth</span>
+          <span class="tl-task">Admin Panel</span>
+          <span class="tl-task">对话历史</span>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-phase">Day 8-9</div>
+        <div class="tl-title">MkDocs Wiki + 文件监听</div>
+        <div class="tl-desc">配置 MkDocs Material 主题，启用 roamlinks 插件兼容 Obsidian 内部链接，部署 watcher.py 自动监听 wiki/ 和 raw/ 目录变化触发重新索引。</div>
+        <div class="tl-tasks">
+          <span class="tl-task">MkDocs 配置</span>
+          <span class="tl-task">roamlinks</span>
+          <span class="tl-task">watcher 部署</span>
+          <span class="tl-task">自动摄入测试</span>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-phase">Day 10-12</div>
+        <div class="tl-title">多模态 + PDF 摄入 + PageIndex</div>
+        <div class="tl-desc">接入 LLaVA 本地视觉模型处理截图/图表，配置 PyMuPDF PDF 解析（短文档），为 ≥20 页的 GDC PDF 集成 <code>pageindex</code> 推理导航检索（第 4 条检索路径），批量摄入所有资料并验证长文档检索精准率提升。</div>
+        <div class="tl-tasks">
+          <span class="tl-task">LLaVA 集成</span>
+          <span class="tl-task">PyMuPDF 解析</span>
+          <span class="tl-task">pageindex 集成</span>
+          <span class="tl-task">批量 PDF 摄入</span>
+          <span class="tl-task">图片描述检索</span>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-phase">Day 13-14</div>
+        <div class="tl-title">质量评测 + 文档收尾</div>
+        <div class="tl-desc">使用 RAGAS 对 20+ 测试问题进行评测（faithfulness、answer relevance、context recall），根据结果调整 Top K / reranker 阈值，完成内部使用文档。</div>
+        <div class="tl-tasks">
+          <span class="tl-task">RAGAS 评测</span>
+          <span class="tl-task">参数调优</span>
+          <span class="tl-task">使用文档</span>
+          <span class="tl-task">团队培训</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 9: Pros/Cons -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Evaluation</div>
+      <h2 class="section-title">优势与局限</h2>
+    </div>
+    <div class="pros-cons">
+      <div class="pros-box">
+        <div class="box-title">✅ 核心优势</div>
+        <ul class="check-list">
+          <li>零云端成本：所有模型本地运行，无 API 费用</li>
+          <li>数据完全私有：知识库内容不离开本地网络</li>
+          <li>启动速度最快：1-2 天内可完成首次部署</li>
+          <li>技术栈简单：纯 Python，无微服务，易于调试</li>
+          <li>Hybrid Search 效果好：vector + BM25 RRF 融合</li>
+          <li>BGE 系列双语支持：中英文混合内容表现优秀</li>
+          <li>可离线运行：断网环境下完全可用</li>
+          <li>易于迁移：LlamaIndex 代码可直接复用到方案 B/C</li>
+        </ul>
+      </div>
+      <div class="cons-box">
+        <div class="box-title">⚠️ 已知局限</div>
+        <ul class="check-list">
+          <li>本地 LLM 质量低于 GPT-4：答案精度有明显差距</li>
+          <li>多用户体验差：Streamlit 单进程，并发支持有限</li>
+          <li>PDF 解析能力弱：复杂表格/图表布局识别不如 DeepDoc</li>
+          <li>无 GraphRAG：实体关系图谱需要额外集成 Neo4j</li>
+          <li>无 Agentic RAG：无法自动搜索和摄入外部资源</li>
+          <li>认证系统简陋：YAML + bcrypt 不适合大团队</li>
+          <li>硬件要求较高：M1 16GB 最低配，量化模型有精度损失</li>
+          <li>扩展性受限：单机部署，文档量超过 10万 chunks 后性能下降</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="notice notice-warn" style="margin-top:20px;">
+      <span class="notice-icon">⚠️</span>
+      <div class="notice-body">
+        <strong>适用场景：</strong>个人或小团队（≤5人）的 Phase 1 快速验证；知识库总文档量 &lt; 500 个文件；对答案质量要求适中；需要完全离线/私有部署的场景。如果团队超过 5 人或需要更高质量的问答，建议在 2-4 周后迁移到 <strong>方案 B (Dify)</strong>。
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 10: Migration Path -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Migration Path</div>
+      <h2 class="section-title">迁移至方案 B (Dify) 的路径</h2>
+      <p class="section-desc">方案 D 的数据结构与方案 B 兼容——wiki/ 目录结构不变，只需将向量数据库和 UI 层替换即可，迁移成本低。</p>
+    </div>
+
+    <div class="migration-path">
+      <div class="migrate-step">
+        <div class="migrate-num">1</div>
+        <div class="migrate-content">
+          <div class="migrate-title">保留 Obsidian Wiki 目录结构</div>
+          <div class="migrate-desc">wiki/ 目录 Markdown 文件无需任何修改，frontmatter schema 与 Dify 知识库 metadata 完全兼容</div>
+        </div>
+        <div class="migrate-arrow">✓</div>
+      </div>
+      <div class="migrate-step">
+        <div class="migrate-num">2</div>
+        <div class="migrate-content">
+          <div class="migrate-title">部署 Dify + bge-m3 embedding 服务</div>
+          <div class="migrate-desc">运行 <code>docker-compose up</code> 启动 Dify，配置与方案 D 相同的 bge-m3 作为 embedding 模型，向量空间保持一致</div>
+        </div>
+        <div class="migrate-arrow">→</div>
+      </div>
+      <div class="migrate-step">
+        <div class="migrate-num">3</div>
+        <div class="migrate-content">
+          <div class="migrate-title">批量导入至 Dify Knowledge Base</div>
+          <div class="migrate-desc">通过 Dify API 批量上传 wiki/ 文档，选择 Hybrid 检索模式，配置 BGE-reranker，无需重新标注或修改内容</div>
+        </div>
+        <div class="migrate-arrow">→</div>
+      </div>
+      <div class="migrate-step">
+        <div class="migrate-num">4</div>
+        <div class="migrate-content">
+          <div class="migrate-title">迁移 raw/ 资源并重新摄入</div>
+          <div class="migrate-desc">将 raw/pdf/ 和 raw/images/ 的文件通过 Dify 多模态摄入工作流重新处理，获得更好的 DeepDoc 解析质量</div>
+        </div>
+        <div class="migrate-arrow">→</div>
+      </div>
+      <div class="migrate-step">
+        <div class="migrate-num">5</div>
+        <div class="migrate-content">
+          <div class="migrate-title">替换 Streamlit UI → Dify 应用</div>
+          <div class="migrate-desc">在 Dify 中配置 Adaptive RAG Workflow，替代 Streamlit Chat UI；原有用户迁移到 Dify 工作空间成员管理</div>
+        </div>
+        <div class="migrate-arrow">→</div>
+      </div>
+      <div class="migrate-step">
+        <div class="migrate-num">6</div>
+        <div class="migrate-content">
+          <div class="migrate-title">保留 MkDocs Wiki 站点（可选）</div>
+          <div class="migrate-desc">MkDocs 静态 Wiki 浏览站可继续运行，与 Dify 问答系统并行提供服务，两者共享同一个 wiki/ 目录</div>
+        </div>
+        <div class="migrate-arrow">✓</div>
+      </div>
+    </div>
+
+    <div class="notice notice-success" style="margin-top:20px;">
+      <span class="notice-icon">🎯</span>
+      <div class="notice-body">
+        <strong>推荐演进路线：</strong> <strong>方案 D</strong>（第 1-2 周，快速搭建基础版） → <strong>方案 B Dify</strong>（第 3-6 周，升级为生产级别，接入 GPT-4o 和 Adaptive RAG） → 视情况考虑 <strong>方案 A</strong>（团队扩大至 10+ 人后的完整定制平台）
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- SECTION 11: Comparison with other solutions -->
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-label">Comparison</div>
+      <h2 class="section-title">四方案对比速览</h2>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>维度</th>
+          <th>方案 A 全栈</th>
+          <th>方案 B Dify ⭐</th>
+          <th>方案 C RAGFlow</th>
+          <th>方案 D 本地栈</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>启动时间</strong></td>
+          <td>16 周</td>
+          <td>3-4 周</td>
+          <td>4-6 周</td>
+          <td><strong style="color:#80d080;">1-2 周</strong></td>
+        </tr>
+        <tr>
+          <td><strong>月费用</strong></td>
+          <td>$90-205</td>
+          <td>$46-101</td>
+          <td>$75-150</td>
+          <td><strong style="color:#80d080;">$0</strong></td>
+        </tr>
+        <tr>
+          <td><strong>答案质量</strong></td>
+          <td>★★★★★</td>
+          <td>★★★★☆</td>
+          <td>★★★★☆</td>
+          <td>★★★☆☆</td>
+        </tr>
+        <tr>
+          <td><strong>PDF 解析</strong></td>
+          <td>Unstructured</td>
+          <td>Dify DeepDoc</td>
+          <td><strong style="color:#80d080;">DeepDoc 最强</strong></td>
+          <td>PyMuPDF + <strong style="color:#80b8f8;">PageIndex（长 PDF）</strong></td>
+        </tr>
+        <tr>
+          <td><strong>RAG 技术数</strong></td>
+          <td>12 种</td>
+          <td>9 种</td>
+          <td>7 种</td>
+          <td>6 种（含 PageIndex）</td>
+        </tr>
+        <tr>
+          <td><strong>多用户</strong></td>
+          <td>完整 RBAC</td>
+          <td>工作空间隔离</td>
+          <td>RAGFlow 团队</td>
+          <td>YAML 3角色</td>
+        </tr>
+        <tr>
+          <td><strong>数据私有性</strong></td>
+          <td>可自托管</td>
+          <td>可自托管</td>
+          <td><strong style="color:#80d080;">完全本地</strong></td>
+          <td><strong style="color:#80d080;">完全本地</strong></td>
+        </tr>
+        <tr>
+          <td><strong>适合阶段</strong></td>
+          <td>Phase 3+</td>
+          <td>Phase 2+</td>
+          <td>Phase 2</td>
+          <td><strong style="color:#80d080;">Phase 1</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+
+<!-- Footer -->
+<div class="footer">
+  <p>
+    <a href="overview.html">← 返回总览</a> &nbsp;|&nbsp;
+    <a href="solution-a-fullstack.html">方案 A 全栈定制</a> &nbsp;|&nbsp;
+    <a href="solution-b-dify.html">方案 B Dify ⭐</a> &nbsp;|&nbsp;
+    <a href="solution-c-ragflow.html">方案 C RAGFlow</a>
+  </p>
+  <p style="margin-top:12px;">Match-3 Knowledge Base Design · Solution D — Lightweight Local Stack</p>
+</div>
+
+</body>
+</html>

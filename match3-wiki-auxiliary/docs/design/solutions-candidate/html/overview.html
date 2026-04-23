@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三消知识库系统 — 方案总览</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 15px; line-height: 1.8; color: #1a1a2e; background: #f4f6fb;
+}
+.cover {
+  background: linear-gradient(135deg, #0d1b4b 0%, #1a3a7c 60%, #0d1b4b 100%);
+  color: white; padding: 72px 60px 60px;
+}
+.cover h1 { font-size: 2.2em; font-weight: 700; letter-spacing: 0.02em; }
+.cover .sub { font-size: 1.3em; opacity: 0.85; margin-top: 6px; font-weight: 300; }
+.cover .meta { opacity: 0.65; font-size: 0.9em; margin-top: 16px; }
+.cover .badges { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+.badge {
+  display: inline-block; background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25); border-radius: 4px;
+  padding: 4px 12px; font-size: 0.82em;
+}
+.container { max-width: 1100px; margin: 0 auto; padding: 40px 40px 100px; }
+h2 { font-size: 1.45em; color: #0d1b4b; border-bottom: 2px solid #dde4f5;
+     padding-bottom: 8px; margin: 2.2em 0 0.7em; font-weight: 700; }
+h3 { font-size: 1.15em; color: #1a3a7c; margin: 1.6em 0 0.5em; font-weight: 600; }
+p { margin: 0.5em 0; }
+hr { border: none; border-top: 1px solid #dde4f5; margin: 2em 0; }
+blockquote {
+  border-left: 3px solid #4a7fd4; background: #eef3ff;
+  padding: 10px 16px; margin: 1em 0; border-radius: 0 6px 6px 0;
+  color: #2d4a8a; font-size: 0.93em;
+}
+table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.88em; }
+th {
+  background: #1a3a7c; color: white; padding: 9px 14px;
+  text-align: left; font-weight: 600; font-size: 0.88em;
+}
+td { padding: 8px 14px; border-bottom: 1px solid #dde4f5; vertical-align: top; }
+tr:nth-child(even) td { background: #f0f4ff; }
+tr:hover td { background: #e4ecff; }
+li { margin: 3px 0 3px 1.6em; }
+strong { color: #0d1b4b; }
+a { color: #3b6fd4; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.solution-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  margin: 1.5em 0;
+}
+.solution-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid #dde4f5;
+  box-shadow: 0 2px 8px rgba(13,27,75,0.06);
+  transition: box-shadow 0.2s;
+}
+.solution-card:hover { box-shadow: 0 4px 20px rgba(13,27,75,0.12); }
+.card-header {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+}
+.card-label {
+  background: #1a3a7c; color: white; border-radius: 6px;
+  padding: 4px 12px; font-weight: 700; font-size: 0.9em; white-space: nowrap;
+}
+.card-title { font-size: 1.1em; font-weight: 700; color: #0d1b4b; }
+.card-subtitle { font-size: 0.85em; color: #666; margin-top: 2px; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.tag {
+  background: #eef3ff; color: #1a3a7c; border-radius: 4px;
+  padding: 2px 8px; font-size: 0.78em; border: 1px solid #c5d5f5;
+}
+.tag.green { background: #eefbf0; color: #1a6b3a; border-color: #b5e5c5; }
+.tag.orange { background: #fff5eb; color: #8b4513; border-color: #f5d5a5; }
+.tag.red { background: #fff0f0; color: #8b1a1a; border-color: #f5b5b5; }
+.score-row { display: flex; gap: 16px; margin-top: 12px; font-size: 0.82em; }
+.score-item { display: flex; flex-direction: column; align-items: center; }
+.score-label { color: #888; font-size: 0.85em; }
+.score-val { font-weight: 700; color: #1a3a7c; font-size: 1.1em; }
+.recommended-badge {
+  background: linear-gradient(90deg, #16a34a, #22c55e);
+  color: white; border-radius: 4px; padding: 2px 10px;
+  font-size: 0.75em; font-weight: 700; margin-left: auto;
+}
+.decision-box {
+  background: white; border-radius: 12px; padding: 28px;
+  border: 2px solid #1a3a7c; margin: 1.5em 0;
+  box-shadow: 0 2px 12px rgba(13,27,75,0.08);
+}
+.decision-row {
+  display: flex; align-items: flex-start; gap: 16px;
+  padding: 12px 0; border-bottom: 1px solid #eef3ff;
+}
+.decision-row:last-child { border-bottom: none; }
+.decision-if {
+  background: #eef3ff; color: #1a3a7c; border-radius: 6px;
+  padding: 4px 12px; font-size: 0.85em; white-space: nowrap; min-width: 160px;
+  font-weight: 600;
+}
+.decision-then { font-size: 0.93em; color: #333; }
+.decision-then strong { color: #0d1b4b; }
+.rag-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 1em 0;
+}
+.rag-card {
+  background: white; border-radius: 8px; padding: 16px;
+  border: 1px solid #dde4f5;
+}
+.rag-card h4 { font-size: 0.92em; color: #1a3a7c; margin-bottom: 8px; }
+.rag-card p { font-size: 0.83em; color: #555; margin: 0; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>三消知识库系统</h1>
+  <div class="sub">系统设计方案总览 &nbsp;·&nbsp; 4 种方案对比</div>
+  <div class="meta">2026-04-21 &nbsp;·&nbsp; 基于 yupi.md RAG 技术体系</div>
+  <div class="badges">
+    <span class="badge">Q&amp;A 问答</span>
+    <span class="badge">Wiki 页面</span>
+    <span class="badge">动态资料摄入</span>
+    <span class="badge">多模态</span>
+    <span class="badge">多用户</span>
+    <span class="badge">高召回率 RAG</span>
+  </div>
+</div>
+
+<div class="container">
+
+<h2>一、需求全景</h2>
+
+<table>
+<thead><tr><th>功能维度</th><th>具体需求</th><th>技术挑战</th></tr></thead>
+<tbody>
+<tr><td><strong>Wiki 页面层</strong></td><td>结构化知识页面浏览、编辑、版本管理</td><td>Markdown 渲染 + frontmatter 管理 + 权限控制</td></tr>
+<tr><td><strong>Q&amp;A 问答层</strong></td><td>基于知识库的自然语言问答，答案可溯源</td><td>RAG 检索精度 + 来源引用 + 幻觉控制</td></tr>
+<tr><td><strong>动态资料摄入</strong></td><td>随时加入 URL/PDF/视频/图片等到知识库</td><td>多格式解析 + 自动分块向量化 + 即时生效</td></tr>
+<tr><td><strong>多模态支持</strong></td><td>图表、截图、视频帧、PDF 内嵌图片可检索</td><td>视觉 Embedding + 图文混排解析</td></tr>
+<tr><td><strong>多用户</strong></td><td>不同角色（管理员/编辑/读者）权限不同</td><td>认证授权 + 工作空间隔离 + 审计日志</td></tr>
+<tr><td><strong>高召回率 RAG</strong></td><td>复杂问题（跨文档推理、术语精确匹配）</td><td>Hybrid Search + Reranking + GraphRAG</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>二、RAG 技术选型矩阵</h2>
+
+<p>根据 yupi.md 中的 16 种 RAG 方案，针对三消知识库的特点选取最合适的组合：</p>
+
+<div class="rag-grid">
+  <div class="rag-card">
+    <h4>✅ Hybrid Search（必选）</h4>
+    <p>向量语义检索 + BM25 关键词检索并行，RRF 融合。解决"CPI 4012 错误"这类专有名词精确匹配失效的问题。</p>
+  </div>
+  <div class="rag-card">
+    <h4>✅ Reranking（必选）</h4>
+    <p>Cross-Encoder 精排，从 Hybrid Search 捞出的 50-150 个候选中筛出真正相关的 5-10 个。生产环境必备。</p>
+  </div>
+  <div class="rag-card">
+    <h4>✅ Parent-Child Retrieval（必选）</h4>
+    <p>小块精确匹配，返回所属大块上下文。三消 Wiki 页面结构化强，适合分层索引。</p>
+  </div>
+  <div class="rag-card">
+    <h4>✅ GraphRAG（推荐）</h4>
+    <p>游戏/公司/机制实体关联图。回答"哪些游戏用了 X 机制且 UA 策略相似"需要跨文档多跳推理。</p>
+  </div>
+  <div class="rag-card">
+    <h4>✅ Adaptive RAG（推荐）</h4>
+    <p>路由器判断问题复杂度，简单问题直接回答，复杂问题走完整 Pipeline，降低延迟和成本。</p>
+  </div>
+  <div class="rag-card">
+    <h4>✅ Multi-Agent RAG（高级）</h4>
+    <p>Router + Wiki Agent + Market Agent + UA Agent + Verifier，各司其职，适合多数据源场景。</p>
+  </div>
+  <div class="rag-card">
+    <h4>✅ Multimodal RAG（必选）</h4>
+    <p>图表/截图/PDF 图片 Embedding，视觉语言模型生成回答。三消 GDC 演讲有大量图表。</p>
+  </div>
+  <div class="rag-card">
+    <h4>✅ CRAG（推荐）</h4>
+    <p>检索结果质检 + 回退 Web 搜索兜底。知识库内容不够时自动补充，保证召回率。</p>
+  </div>
+  <div class="rag-card">
+    <h4>⚡ Speculative RAG（可选）</h4>
+    <p>多小模型并行生成草稿，大模型验证。延迟敏感时使用，降低响应时间约 30-40%。</p>
+  </div>
+</div>
+
+<hr>
+
+<h2>三、四种方案概览</h2>
+
+<div class="solution-grid">
+
+  <div class="solution-card">
+    <div class="card-header">
+      <div class="card-label">方案 A</div>
+      <div>
+        <div class="card-title">全栈自研平台</div>
+        <div class="card-subtitle">Full-Stack Custom Platform</div>
+      </div>
+      <div class="recommended-badge">🏆 功能最全</div>
+    </div>
+    <p style="font-size:0.88em;color:#444;">从头自建，完全掌控每一层。前端 Next.js + 后端 FastAPI + Milvus 向量库 + Neo4j 图数据库 + PostgreSQL 元数据。</p>
+    <div class="tag-row">
+      <span class="tag">Next.js</span>
+      <span class="tag">FastAPI</span>
+      <span class="tag">Milvus</span>
+      <span class="tag">Neo4j</span>
+      <span class="tag">Multi-Agent RAG</span>
+      <span class="tag">GraphRAG</span>
+    </div>
+    <div class="score-row">
+      <div class="score-item"><div class="score-val">★★★★★</div><div class="score-label">功能完整</div></div>
+      <div class="score-item"><div class="score-val">★★★★★</div><div class="score-label">可定制性</div></div>
+      <div class="score-item"><div class="score-val">★☆☆☆☆</div><div class="score-label">启动速度</div></div>
+      <div class="score-item"><div class="score-val">★★★☆☆</div><div class="score-label">运维成本</div></div>
+    </div>
+    <p style="margin-top:12px;font-size:0.83em;color:#666;">⏱ 预计 12-16 周 &nbsp;·&nbsp; 👤 需 2-3 人开发</p>
+    <p style="font-size:0.83em;"><a href="solution-a-fullstack.html">→ 查看详细方案</a></p>
+  </div>
+
+  <div class="solution-card" style="border-color: #16a34a;">
+    <div class="card-header">
+      <div class="card-label" style="background:#16a34a;">方案 B</div>
+      <div>
+        <div class="card-title">Dify 低代码平台</div>
+        <div class="card-subtitle">Dify-Based Low-Code</div>
+      </div>
+      <div class="recommended-badge">⭐ 推荐首选</div>
+    </div>
+    <p style="font-size:0.88em;color:#444;">以 Dify 开源平台为核心，自托管部署。内置多用户、混合检索、工作流编排，配合 Obsidian 做 Wiki 编辑层。</p>
+    <div class="tag-row">
+      <span class="tag green">Dify</span>
+      <span class="tag green">Obsidian</span>
+      <span class="tag green">Docusaurus</span>
+      <span class="tag green">Hybrid Search</span>
+      <span class="tag green">Workflow RAG</span>
+    </div>
+    <div class="score-row">
+      <div class="score-item"><div class="score-val">★★★★☆</div><div class="score-label">功能完整</div></div>
+      <div class="score-item"><div class="score-val">★★★☆☆</div><div class="score-label">可定制性</div></div>
+      <div class="score-item"><div class="score-val">★★★★★</div><div class="score-label">启动速度</div></div>
+      <div class="score-item"><div class="score-val">★★★★★</div><div class="score-label">运维成本</div></div>
+    </div>
+    <p style="margin-top:12px;font-size:0.83em;color:#666;">⏱ 预计 3-4 周 &nbsp;·&nbsp; 👤 1 人可完成</p>
+    <p style="font-size:0.83em;"><a href="solution-b-dify.html">→ 查看详细方案</a></p>
+  </div>
+
+  <div class="solution-card">
+    <div class="card-header">
+      <div class="card-label" style="background:#7c3a1a;">方案 C</div>
+      <div>
+        <div class="card-title">RAGFlow + Obsidian</div>
+        <div class="card-subtitle">RAGFlow Hybrid Stack</div>
+      </div>
+    </div>
+    <p style="font-size:0.88em;color:#444;">RAGFlow 专注深度文档解析（PDF/表格/图表），Obsidian 保持 Wiki 编辑体验，Docusaurus 对外发布。三层分工明确。</p>
+    <div class="tag-row">
+      <span class="tag orange">RAGFlow</span>
+      <span class="tag orange">Obsidian</span>
+      <span class="tag orange">Docusaurus</span>
+      <span class="tag orange">Deep Document Parse</span>
+    </div>
+    <div class="score-row">
+      <div class="score-item"><div class="score-val">★★★★☆</div><div class="score-label">功能完整</div></div>
+      <div class="score-item"><div class="score-val">★★★★☆</div><div class="score-label">文档解析</div></div>
+      <div class="score-item"><div class="score-val">★★★★☆</div><div class="score-label">启动速度</div></div>
+      <div class="score-item"><div class="score-val">★★★☆☆</div><div class="score-label">运维成本</div></div>
+    </div>
+    <p style="margin-top:12px;font-size:0.83em;color:#666;">⏱ 预计 4-6 周 &nbsp;·&nbsp; 👤 1-2 人</p>
+    <p style="font-size:0.83em;"><a href="solution-c-ragflow.html">→ 查看详细方案</a></p>
+  </div>
+
+  <div class="solution-card">
+    <div class="card-header">
+      <div class="card-label" style="background:#4a4a6a;">方案 D</div>
+      <div>
+        <div class="card-title">轻量本地栈</div>
+        <div class="card-subtitle">Lightweight Local Stack</div>
+      </div>
+      <div class="recommended-badge" style="background:linear-gradient(90deg,#4a4a6a,#7a7aa0);">💻 本地优先</div>
+    </div>
+    <p style="font-size:0.88em;color:#444;">LlamaIndex + Chroma + Streamlit，全本地运行。零云成本，数据完全私有，适合个人启动或快速验证 RAG 效果。</p>
+    <div class="tag-row">
+      <span class="tag">LlamaIndex</span>
+      <span class="tag">Chroma</span>
+      <span class="tag">Streamlit</span>
+      <span class="tag">MkDocs</span>
+      <span class="tag">本地 LLM</span>
+    </div>
+    <div class="score-row">
+      <div class="score-item"><div class="score-val">★★★☆☆</div><div class="score-label">功能完整</div></div>
+      <div class="score-item"><div class="score-val">★★★★★</div><div class="score-label">数据私有</div></div>
+      <div class="score-item"><div class="score-val">★★★★★</div><div class="score-label">启动速度</div></div>
+      <div class="score-item"><div class="score-val">★★★★★</div><div class="score-label">零成本</div></div>
+    </div>
+    <p style="margin-top:12px;font-size:0.83em;color:#666;">⏱ 预计 1-2 周 &nbsp;·&nbsp; 👤 1 人可完成</p>
+    <p style="font-size:0.83em;"><a href="solution-d-lightweight.html">→ 查看详细方案</a></p>
+  </div>
+
+</div>
+
+<hr>
+
+<h2>四、全面对比表</h2>
+
+<table>
+<thead><tr>
+  <th>维度</th>
+  <th>方案 A 全栈自研</th>
+  <th>方案 B Dify ⭐</th>
+  <th>方案 C RAGFlow</th>
+  <th>方案 D 轻量栈</th>
+</tr></thead>
+<tbody>
+<tr><td><strong>Wiki 页面</strong></td><td>自研编辑器 + MDX</td><td>Obsidian + Docusaurus</td><td>Obsidian + Docusaurus</td><td>Markdown + MkDocs</td></tr>
+<tr><td><strong>Q&amp;A 界面</strong></td><td>自研 Chat UI</td><td>Dify Chat 内置</td><td>RAGFlow Chat</td><td>Streamlit Chat</td></tr>
+<tr><td><strong>Hybrid Search</strong></td><td>✅ 完全自定义</td><td>✅ 内置开箱即用</td><td>✅ 内置</td><td>✅ LlamaIndex 实现</td></tr>
+<tr><td><strong>Reranking</strong></td><td>✅ Cohere/BGE</td><td>✅ 内置支持</td><td>✅ 内置</td><td>✅ BGE-reranker</td></tr>
+<tr><td><strong>GraphRAG</strong></td><td>✅ Neo4j + 自研</td><td>⚠️ 需自定义工作流</td><td>⚠️ 需外接</td><td>⚠️ LlamaIndex Graph</td></tr>
+<tr><td><strong>Multi-Agent</strong></td><td>✅ 完全自定义</td><td>✅ Dify Workflow</td><td>⚠️ 有限支持</td><td>⚠️ 基础支持</td></tr>
+<tr><td><strong>多模态（图片/PDF图）</strong></td><td>✅ CLIP + GPT-4V</td><td>✅ 支持视觉模型</td><td>✅ 深度文档解析</td><td>⚠️ 基础支持</td></tr>
+<tr><td><strong>动态资料摄入</strong></td><td>✅ 全格式 Pipeline</td><td>✅ 上传 UI + API</td><td>✅ 内置 Pipeline</td><td>✅ Python 脚本</td></tr>
+<tr><td><strong>多用户 + RBAC</strong></td><td>✅ 完全自定义</td><td>✅ 内置 Workspace</td><td>✅ 内置团队</td><td>⚠️ 基础 Auth</td></tr>
+<tr><td><strong>CRAG（Web 兜底）</strong></td><td>✅</td><td>✅ Workflow 实现</td><td>⚠️ 需配置</td><td>✅ LlamaIndex</td></tr>
+<tr><td><strong>Adaptive RAG 路由</strong></td><td>✅</td><td>✅ Dify Condition</td><td>⚠️</td><td>✅</td></tr>
+<tr><td><strong>数据私有化</strong></td><td>✅ 自托管</td><td>✅ 自托管</td><td>✅ 自托管</td><td>✅ 完全本地</td></tr>
+<tr><td><strong>启动时间</strong></td><td>12-16 周</td><td>3-4 周</td><td>4-6 周</td><td>1-2 周</td></tr>
+<tr><td><strong>开发人力</strong></td><td>2-3 人</td><td>1 人</td><td>1-2 人</td><td>1 人</td></tr>
+<tr><td><strong>月运维成本</strong></td><td>$200-500（云服务器）</td><td>$50-150（VPS）</td><td>$80-200（VPS）</td><td>$0（本地）</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>五、决策指南</h2>
+
+<div class="decision-box">
+  <div class="decision-row">
+    <div class="decision-if">如果你是个人启动</div>
+    <div class="decision-then">→ <strong>方案 D 轻量栈</strong>：1-2 周跑通，先验证内容价值，再升级</div>
+  </div>
+  <div class="decision-row">
+    <div class="decision-if">如果你要快速上线</div>
+    <div class="decision-then">→ <strong>方案 B Dify</strong>：3-4 周可用，功能完整，1 人可维护，强烈推荐</div>
+  </div>
+  <div class="decision-row">
+    <div class="decision-if">如果有大量 PDF/GDC 演讲</div>
+    <div class="decision-then">→ <strong>方案 C RAGFlow</strong>：深度文档解析是其核心优势，表格/图表识别最强</div>
+  </div>
+  <div class="decision-row">
+    <div class="decision-if">如果要完全自定义 UI/UX</div>
+    <div class="decision-then">→ <strong>方案 A 全栈自研</strong>：完全掌控，但需要 12+ 周和 2-3 人</div>
+  </div>
+  <div class="decision-row">
+    <div class="decision-if">PRD Phase 1 冷启动阶段</div>
+    <div class="decision-then">→ <strong>方案 D → 方案 B 迁移路径</strong>：先用 D 建 30 篇内容，再用 B 发布</div>
+  </div>
+  <div class="decision-row">
+    <div class="decision-if">PRD Phase 3 对外发布</div>
+    <div class="decision-then">→ <strong>方案 B 或 A</strong>：Docusaurus 建站 + 完整 RAG 查询 API</div>
+  </div>
+</div>
+
+<hr>
+
+<h2>六、推荐演进路径</h2>
+
+<blockquote>
+  针对 PRD 的四阶段计划，推荐以下演进路径，避免早期过度投入架构，内容优先。
+</blockquote>
+
+<table>
+<thead><tr><th>PRD 阶段</th><th>推荐方案</th><th>重点</th></tr></thead>
+<tbody>
+<tr><td><strong>Phase 1（第 1-8 周）</strong><br>高质量内容优先</td><td>方案 D 轻量栈</td><td>快速建立 30+ 篇 Wiki，验证内容价值；本地 RAG 问答测试召回效果</td></tr>
+<tr><td><strong>Phase 2（第 9-16 周）</strong><br>扩展品类 + 图谱化</td><td>迁移至方案 B (Dify)<br>或方案 C (RAGFlow)</td><td>引入多用户协作；建立 GraphRAG 层；接入图表/PDF 多模态解析</td></tr>
+<tr><td><strong>Phase 3（第 17 周+）</strong><br>发布与可见度</td><td>方案 B + Docusaurus</td><td>Docusaurus 对外发布 Wiki；Dify API 对外提供 Q&amp;A；SEO 优化</td></tr>
+<tr><td><strong>Phase 4（持续运营）</strong><br>或有更高需求</td><td>升级至方案 A</td><td>若需要完全定制 UI/商业化，再投入全栈自研</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<p style="text-align:center;color:#888;font-size:0.85em;margin-top:40px;">
+  文档版本 v1.0 · 2026-04-21 · 配套文件：
+  <a href="solution-a-fullstack.html">方案 A</a> ·
+  <a href="solution-b-dify.html">方案 B</a> ·
+  <a href="solution-c-ragflow.html">方案 C</a> ·
+  <a href="solution-d-lightweight.html">方案 D</a>
+</p>
+
+</div>
+</body>
+</html>

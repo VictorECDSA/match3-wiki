@@ -111,11 +111,11 @@ from app.runtime.dependencies.logger.loguru.loguru_logger import LoguruLogger
 def create_logger(config: Config) -> Logger:
     """Create logger instance from application config"""
     log_config = LogConfig(
-        level=config.log.level,
-        format=config.log.format,
-        rotation=config.log.rotation,
-        retention=config.log.retention,
-        log_file="logs/anim-facade.log"
+        level=config.runtime.logger.level,
+        format=config.runtime.logger.format,
+        rotation=config.runtime.logger.rotation,
+        retention=config.runtime.logger.retention,
+        log_file="logs/match3-wiki.log"
     )
     return LoguruLogger(log_config)
 ```
@@ -156,11 +156,12 @@ def build_runtime(config: Config, env: Env) -> Match3Runtime:
 ### Config (config.yaml)
 
 ```yaml
-log:
-  level: INFO
-  format: json  # json or text
-  rotation: 1 day
-  retention: 7 days
+runtime:
+  logger:
+    level: INFO
+    format: json  # json or text
+    rotation: 1 day
+    retention: 7 days
 ```
 
 ---

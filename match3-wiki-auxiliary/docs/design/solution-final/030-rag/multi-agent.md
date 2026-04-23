@@ -1,4 +1,4 @@
-# 多智能体 RAG（方法 14）
+# 多智能体 RAG
 
 ## 架构
 
@@ -40,7 +40,7 @@
 ## 实现
 
 ```python
-# app/rag/chunk/multi_agent.py
+# app/rag/multi_agent.py
 from __future__ import annotations
 import json
 from typing import Generator
@@ -127,22 +127,13 @@ def multi_agent_rag(
     query: str,
     workspace_id: str,
 ) -> Generator[str, None, None]:
-    """多智能体 RAG 主入口，适用于需要多个知识域的复杂查询。
-
-    执行步骤：
-    1. 路由器将查询分解为子问题并分配域智能体
-    2. 域智能体并行检索并回答子问题
-    3. 验证器交叉核查智能体答案的一致性
-    4. 写作器合成最终流式答案
-    """
-
-    # 第一步：路由器分解查询
+    # Step 1: router decomposes query
     sub_questions = _route_query(rt, query)
     if not sub_questions:
-        yield "无法将该查询分解为多智能体子问题。"
+        yield "Unable to decompose query for multi-agent processing."
         return
 
-    # 第二步：域智能体回答子问题（通过每域 hybrid_search 并行执行）
+    # Step 2: domain agents answer sub-questions (sequential; see Celery chord section for parallel)
     agent_answers = []
     for sq in sub_questions:
         answer = _run_domain_agent(rt, workspace_id, sq["agent"], sq["question"])
@@ -152,293 +143,191 @@ def multi_agent_rag(
             "answer": answer,
         })
 
-    # 第三步：验证器交叉核查答案
+    # Step 3: verifier cross-checks answers
     verified = _verify_answers(rt, query, agent_answers)
 
-    # 第四步：写作器合成最终答案（流式）
+    # Step 4: writer synthesizes final answer (streaming)
     yield from _write_answer(rt, query, verified)
 
 
 def _route_query(rt: Match3Runtime, query: str) -> list[dict]:
-    """使用 LLM 将查询分解为子问题并分配域智能体。"""
     try:
         resp = rt.llm.complete(
-            messages=[{
-                "role": "user",
-                "content": ROUTER_PROMPT.format(query=query),
-            }],
+            messages=[{"role": "user", "content": ROUTER_PROMPT.format(query=query)}],
             response_format={"type": "json_object"},
         )
     except Exception as e:
-        raise Match3Exception.of("failed to route multi-agent query").ctx(
-            query=query,
-        ).as_ex(e)
+        raise Match3Exception.of("failed to route multi-agent query").ctx(query=query).as_ex(e)
 
     try:
-        data = json.loads(resp)
-        return data.get("sub_questions", [])
+        return json.loads(resp).get("sub_questions", [])
     except (json.JSONDecodeError, KeyError) as e:
-        raise Match3Exception.of("failed to parse multi-agent router response").ctx(
-            query=query,
-        ).as_ex(e)
+        raise Match3Exception.of("failed to parse multi-agent router response").ctx(query=query).as_ex(e)
 
 
-def _run_domain_agent(
-    rt: Match3Runtime,
-    workspace_id: str,
-    domain: str,
-    question: str,
-) -> str:
-    """执行单个域智能体：先检索相关块，再回答子问题。
+def _run_domain_agent(rt: Match3Runtime, workspace_id: str, domain: str, question: str) -> str:
+    """Run a single domain agent: retrieve with domain filter, then answer sub-question.
 
-    域智能体按主题分类前缀过滤块：
-    - entity    → 过滤标记为 entities/* 的块
-    - market    → 过滤标记为 market/* 的块
-    - mechanics → 过滤标记为 mechanics/* 的块
-    - growth    → 过滤标记为 growth/* 的块
+    Domain → topic_tags prefix mapping:
+      entity    → entities/*
+      market    → market/*
+      mechanics → mechanics/*
+      growth    → growth/*
     """
-    from app.rag.chunk.hybrid_search import hybrid_search
+    from app.rag.hybrid_search_engine import HybridSearchEngine
+    from app.rag.retrieval_config import RetrievalConfig, RerankLevel
+    import asyncio
 
-    # 检索块（混合搜索，可选按域标签过滤）
+    cfg = RetrievalConfig(
+        dense=True, sparse=True, bm25=True,
+        rerank=RerankLevel.LIGHTWEIGHT,
+        final_top_k=6,
+        domain_filter=domain,   # passed through to Milvus/ES filter
+    )
+
     try:
-        chunks = hybrid_search(rt, question, workspace_id, top_k=20, domain_filter=domain)
+        chunks = asyncio.run(HybridSearchEngine(rt).search(question, workspace_id, cfg))
     except Match3Exception as e:
-        raise Match3Exception.of("domain agent hybrid search failed").ctx(
+        raise Match3Exception.of("domain agent search failed").ctx(
             domain=domain, question=question,
         ).as_ex(e)
 
     if not chunks:
         return f"No data found for: {question}"
 
-    context = "\n\n".join(
-        f"[Source {i+1}]: {c['content']}"
-        for i, c in enumerate(chunks[:6])
-    )
+    context = "\n\n".join(f"[Source {i+1}]: {c['content']}" for i, c in enumerate(chunks))
 
     try:
-        resp = rt.llm.complete(
-            messages=[{
-                "role": "user",
-                "content": DOMAIN_SEARCH_PROMPT.format(
-                    domain=domain,
-                    question=question,
-                    context=context,
-                ),
-            }],
+        return rt.llm.complete(
+            messages=[{"role": "user", "content": DOMAIN_SEARCH_PROMPT.format(
+                domain=domain, question=question, context=context,
+            )}],
         )
     except Exception as e:
         raise Match3Exception.of("domain agent llm call failed").ctx(
             domain=domain, question=question,
         ).as_ex(e)
 
-    return resp
 
-
-def _verify_answers(
-    rt: Match3Runtime,
-    query: str,
-    agent_answers: list[dict],
-) -> dict:
-    """交叉核查各域智能体答案的一致性。"""
+def _verify_answers(rt: Match3Runtime, query: str, agent_answers: list[dict]) -> dict:
     answers_text = "\n\n".join(
         f"[{a['agent'].upper()} Agent] Q: {a['question']}\nA: {a['answer']}"
         for a in agent_answers
     )
-
     try:
         resp = rt.llm.complete(
-            messages=[{
-                "role": "user",
-                "content": VERIFIER_PROMPT.format(
-                    query=query,
-                    answers=answers_text,
-                ),
-            }],
+            messages=[{"role": "user", "content": VERIFIER_PROMPT.format(
+                query=query, answers=answers_text,
+            )}],
             response_format={"type": "json_object"},
         )
     except Exception as e:
-        raise Match3Exception.of("verifier agent llm call failed").ctx(
-            query=query,
-        ).as_ex(e)
+        raise Match3Exception.of("verifier agent llm call failed").ctx(query=query).as_ex(e)
 
     try:
         return json.loads(resp)
     except json.JSONDecodeError as e:
-        raise Match3Exception.of("failed to parse verifier response").ctx(
-            query=query,
-        ).as_ex(e)
+        raise Match3Exception.of("failed to parse verifier response").ctx(query=query).as_ex(e)
 
 
-def _write_answer(
-    rt: Match3Runtime,
-    query: str,
-    verified: dict,
-) -> Generator[str, None, None]:
-    """将验证后的智能体发现流式合成为最终答案。"""
-    verified_answers_text = json.dumps(
-        verified.get("verified_answers", []),
-        indent=2,
-    )
+def _write_answer(rt: Match3Runtime, query: str, verified: dict) -> Generator[str, None, None]:
+    verified_answers_text = json.dumps(verified.get("verified_answers", []), indent=2)
     consistency_summary = verified.get("summary", "")
-
     try:
         stream = rt.llm.stream(
-            messages=[{
-                "role": "user",
-                "content": WRITER_PROMPT.format(
-                    query=query,
-                    verified_answers=verified_answers_text,
-                    consistency_summary=consistency_summary,
-                ),
-            }],
+            messages=[{"role": "user", "content": WRITER_PROMPT.format(
+                query=query,
+                verified_answers=verified_answers_text,
+                consistency_summary=consistency_summary,
+            )}],
         )
     except Exception as e:
-        raise Match3Exception.of("writer agent stream failed").ctx(
-            query=query,
-        ).as_ex(e)
-
+        raise Match3Exception.of("writer agent stream failed").ctx(query=query).as_ex(e)
     yield from stream
 ```
 
 ---
 
-## `hybrid_search` 中的域过滤
+## 域过滤：`domain_filter` 在 RetrievalConfig 中的传递
 
-`hybrid_search()` 新增的 `domain_filter` 参数将块检索限制在特定主题分类下。该参数可选——若该域下没有已标记的块，过滤器将被忽略，退回到全局搜索。
+`RetrievalConfig.domain_filter` 将检索限定在特定主题分类的块中。该参数可选——若该域下无已标记块，过滤器将被忽略，退回全局搜索。
 
-```python
-# app/rag/chunk/hybrid_search.py  (domain_filter extension)
-from app.common.constants import constants
+| domain_filter 值 | Milvus 过滤条件 | ES 过滤条件 |
+|-----------------|----------------|------------|
+| `"entity"` | `topic_tags contains "entities/"` | `prefix: {topic_tags: "entities/"}` |
+| `"market"` | `topic_tags contains "market/"` | `prefix: {topic_tags: "market/"}` |
+| `"mechanics"` | `topic_tags contains "mechanics/"` | `prefix: {topic_tags: "mechanics/"}` |
+| `"growth"` | `topic_tags contains "growth/"` | `prefix: {topic_tags: "growth/"}` |
+| `None` | 不过滤 | 不过滤 |
 
-def hybrid_search(
-    rt: Match3Runtime,
-    query: str,
-    workspace_id: str,
-    top_k: int = 20,
-    domain_filter: str | None = None,   # "entity", "market", "mechanics", "growth"
-) -> list[dict]:
-    """混合搜索：Milvus ANN + Elasticsearch BM25，使用 RRF 合并结果。
-    可选 domain_filter 将搜索限制在带有该域前缀标签的块中。
-    """
-    embedding = _embed_query(rt, query)
-
-    # Milvus ANN 搜索
-    milvus_filter = f'workspace_id == "{workspace_id}"'
-    if domain_filter:
-        milvus_filter += f' && domain == "{domain_filter}"'
-
-    try:
-        milvus_results = rt.milvus.search(
-            collection_name=constants.MILVUS_COLLECTION,
-            data=[embedding],
-            anns_field="dense_vector",
-            param={"metric_type": "COSINE", "params": {"ef": 200}},
-            limit=top_k,
-            expr=milvus_filter,
-            output_fields=["chunk_id", "content", "raw_file_id", "domain"],
-        )
-    except Exception as e:
-        raise Match3Exception.of("milvus search failed in domain agent").ctx(
-            workspace_id=workspace_id, domain=domain_filter,
-        ).as_ex(e)
-
-    # Elasticsearch BM25 搜索
-    es_filter_clauses = [{"term": {"workspace_id": workspace_id}}]
-    if domain_filter:
-        es_filter_clauses.append({"prefix": {"topic_tags": domain_filter + "/"}})
-
-    try:
-        es_resp = rt.es.search(
-            index=constants.ES_INDEX_CHUNKS,
-            body={
-                "query": {
-                    "bool": {
-                        "must": {"match": {"content": query}},
-                        "filter": es_filter_clauses,
-                    }
-                },
-                "size": top_k,
-            },
-        )
-    except Exception as e:
-        raise Match3Exception.of("es search failed in domain agent").ctx(
-            workspace_id=workspace_id, domain=domain_filter,
-        ).as_ex(e)
-
-    return _rrf_merge(milvus_results, es_resp["hits"]["hits"], top_k)
-```
+`domain_filter` 在 `HybridSearchEngine` 内部传入 `dense_search()` 和 `bm25_search()` 的过滤表达式。Graph 通道不适用域过滤（图谱遍历已由锚点实体约束）。
 
 ---
 
 ## 使用 Celery chord 并行执行（可选）
 
-为获得最大吞吐量，域智能体可以通过 `chord` 以并行 Celery 子任务的方式运行。上方的同步版本为简化起见顺序执行；下方的并行版本使用 Celery chord 并发运行各域智能体。
+为获得最大吞吐量，域智能体可通过 `chord` 以并行 Celery 子任务方式运行。上方的同步版本顺序执行，适合 SSE 流式 Q&A；下方的并行版本使用 Celery chord 并发运行各域智能体，适合后台/异步场景。
 
 ```python
-# app/workers/multi_agent_task.py（可选并行执行版本）
+# app/workers/tasks/multi_agent_task.py
 from celery import chord, group
 from app.common.constants import constants
 
 
 @celery_app.task(
     bind=True,
-    name="app.workers.tasks.rag_task.domain_agent_task",
+    name="app.workers.tasks.multi_agent_task.domain_agent_task",
     queue=constants.QUEUE_RAG,
     max_retries=2,
     time_limit=60,
     soft_time_limit=50,
 )
 def domain_agent_task(self, domain: str, question: str, workspace_id: str) -> dict:
-    """并行 chord 中的单个域智能体任务。"""
     rt = get_worker_runtime()
-    from app.rag.chunk.multi_agent import _run_domain_agent
+    from app.rag.multi_agent import _run_domain_agent
     answer = _run_domain_agent(rt, workspace_id, domain, question)
     return {"agent": domain, "question": question, "answer": answer}
 
 
 @celery_app.task(
     bind=True,
-    name="app.workers.tasks.rag_task.multi_agent_verify_task",
+    name="app.workers.tasks.multi_agent_task.multi_agent_verify_task",
     queue=constants.QUEUE_RAG,
     max_retries=1,
     time_limit=120,
     soft_time_limit=110,
 )
 def multi_agent_verify_task(self, agent_answers: list[dict], query: str, workspace_id: str) -> str:
-    """所有域智能体完成后执行验证器 + 写作器（chord 回调）。"""
     rt = get_worker_runtime()
-    from app.rag.chunk.multi_agent import _verify_answers, _write_answer
+    from app.rag.multi_agent import _verify_answers, _write_answer
 
     verified = _verify_answers(rt, query, agent_answers)
-    # 后台任务使用非流式版本
-    answer_parts = list(_write_answer(rt, query, verified))
-    return "".join(answer_parts)
+    return "".join(_write_answer(rt, query, verified))   # non-streaming for background task
 
 
 def run_multi_agent_parallel(rt, query: str, workspace_id: str, sub_questions: list[dict]) -> str:
-    """使用 Celery chord 并行运行域智能体。
+    """Run domain agents in parallel via Celery chord.
 
-    阻塞直到所有智能体完成，然后运行验证器和写作器。
-    适用于后台/异步调用场景（如异步 Wiki 编译）。
-    流式 Q&A 请使用 multi_agent_rag() 中的顺序版本。
+    Blocks until all agents complete, then runs verifier + writer.
+    For streaming Q&A, use the sequential multi_agent_rag() instead.
     """
     agent_tasks = group(
         domain_agent_task.s(sq["agent"], sq["question"], workspace_id)
         for sq in sub_questions
     )
     callback = multi_agent_verify_task.s(query=query, workspace_id=workspace_id)
-    result = chord(agent_tasks)(callback)
-    return result.get(timeout=120)
+    return chord(agent_tasks)(callback).get(timeout=120)
 ```
 
 ---
 
 ## 与 QAService 的集成
 
-在 `QAService._answer_path_chunk()` 中，`multi_agent` 方法通过以下方式分发：
+`_answer_path_chunk()` 通过 `complexity="complex"` 映射到 `PROFILE_COMPLEX`，不直接调用多智能体路径。多智能体 RAG 作为 `PROFILE_COMPLEX` 的可选扩展：当路由器返回 `complexity="complex"` 且查询明确涉及多个知识域时，`_answer_path_chunk()` 可选择调用 `multi_agent_rag()`，否则直接走 `HybridSearchEngine` 的 graph 通道。
 
-```python
-ChunkMethod.MULTI_AGENT: lambda: list(multi_agent_rag(rt, query, workspace_id)),
 ```
-
-由于 `multi_agent_rag()` 本身是一个生成器，lambda 对其进行包装，使 `_answer_path_chunk()` 能与其他所有方法统一迭代。
+complexity == "complex"
+    │
+    ├── 单域查询 ──► HybridSearchEngine(PROFILE_COMPLEX)  [graph=True]
+    └── 多域查询 ──► multi_agent_rag()                    [每个域独立检索]
+```

@@ -24,9 +24,8 @@ def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
     
     redis_client = Redis.from_url(
         env.REDIS_BROKER_URL,
-        max_connections=config.redis.max_connections,
-        socket_timeout=config.redis.socket_timeout,
-        socket_connect_timeout=config.redis.socket_connect_timeout,
+        max_connections=config.runtime.message_queue.implementations.redis.max_connections,
+        socket_timeout=config.runtime.message_queue.implementations.redis.socket_timeout,
         decode_responses=True,
     )
     

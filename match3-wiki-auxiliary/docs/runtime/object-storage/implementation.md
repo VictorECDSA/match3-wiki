@@ -135,7 +135,7 @@ def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
         secure=config.minio.secure,
     )
     
-    logger.info(f"MinIO adapter initialized (bucket: {config.minio.bucket})")
+    logger.info(f"MinIO adapter initialized (bucket: {config.runtime.object_storage.implementations.minio.bucket})")
     
     return Match3Runtime(
         storage=minio_adapter,
@@ -148,7 +148,8 @@ def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
 ### 环境变量配置 (`.env`)
 
 ```bash
-# 对象存储
+# Object Storage
+MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 ```
@@ -341,15 +342,19 @@ match3-files/                # bucket 名称
 ### Config (config.yaml)
 
 ```yaml
-minio:
-  endpoint: localhost:9000   # host:port，无协议前缀
-  bucket: match3-files       # bucket 名称
-  secure: false              # true 使用 HTTPS
+runtime:
+  object_storage:
+    provider: minio
+    implementations:
+      minio:
+        bucket: match3-wiki-files
+        secure: false  # Set to true for HTTPS
 ```
 
 ### Env (.env)
 
 ```bash
+MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 ```

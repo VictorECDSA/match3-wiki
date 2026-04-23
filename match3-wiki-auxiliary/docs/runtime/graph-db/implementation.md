@@ -335,9 +335,13 @@ FOR (c:Company) REQUIRE (c.name, c.workspace_id) IS UNIQUE;
 ### Config (config.yaml)
 
 ```yaml
-neo4j:
-  max_connection_lifetime: 3600    # 连接最大生命周期（秒）
-  max_connection_pool_size: 50     # 连接池大小
+runtime:
+  graph_db:
+    provider: neo4j
+    implementations:
+      neo4j:
+        max_connection_lifetime: 3600    # Connection max lifetime (seconds)
+        max_connection_pool_size: 50     # Connection pool size
 ```
 
 ### Env (.env)

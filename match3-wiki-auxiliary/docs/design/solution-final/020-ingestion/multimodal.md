@@ -392,7 +392,7 @@ def _rows_to_markdown(headers: list[str], rows: list[dict]) -> str:
 当用户以文本进行搜索时，使用 CLIP 文本嵌入在 image_chunks 中检索：
 
 ```python
-# app/rag/chunk/hybrid_search.py
+# app/rag/hybrid_search_engine.py (image search extension)
 from app.common.constants import constants
 
 def search_images_by_text(

@@ -82,7 +82,7 @@
 
 **文件**：`app/services/wiki_compile_service.py`
 
-编译触发逻辑见 `030-rag/path-entry.md`。
+编译触发逻辑见 `030-rag/wiki-lookup.md`。
 
 ### get_task_status()
 

@@ -38,7 +38,7 @@ def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
     )
 ```
 
-### Session 管理
+### Session Management
 
 ```python
 # app/database/session.py
@@ -47,19 +47,19 @@ from app.runtime import Match3Runtime
 
 
 def get_db_session(rt: Match3Runtime) -> Session:
-    """获取数据库会话。
+    """Get database session.
     
-    在服务和任务中使用：
+    Usage in services and tasks:
     with get_db_session(rt) as session:
-        # 执行数据库操作
+        # Perform database operations
         session.commit()
     """
     return Session(rt.db_engine)
 ```
 
-## ORM 模型定义
+## ORM Model Definition
 
-### Base 模型
+### Base Model
 
 ```python
 # app/database/models/base.py
@@ -70,17 +70,17 @@ Base = declarative_base()
 
 
 class TimestampMixin:
-    """时间戳混入类。"""
+    """Timestamp mixin class."""
     created_at = Column(DateTime, nullable=False, server_default=func.now())
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 
 
 class WorkspaceMixin:
-    """工作空间隔离混入类。"""
+    """Workspace isolation mixin class."""
     workspace_id = Column(Integer, nullable=False, index=True)
 ```
 
-### RawFile 模型
+### RawFile Model
 
 ```python
 # app/database/models/raw_file.py
@@ -108,7 +108,7 @@ class RawFile(Base, TimestampMixin, WorkspaceMixin):
     error_message = Column(String(1000), nullable=True)
 ```
 
-### Chunk 模型
+### Chunk Model
 
 ```python
 # app/database/models/chunk.py
@@ -127,11 +127,11 @@ class Chunk(Base, TimestampMixin, WorkspaceMixin):
     start_pos = Column(Integer, nullable=True)
     end_pos = Column(Integer, nullable=True)
     
-    # 关系
+    # Relationships
     raw_file = relationship("RawFile", backref="chunks")
 ```
 
-### WikiPage 模型
+### WikiPage Model
 
 ```python
 # app/database/models/wiki_page.py
@@ -157,12 +157,12 @@ class WikiPage(Base, TimestampMixin, WorkspaceMixin):
     status = Column(Enum(WikiPageStatus), nullable=False, default=WikiPageStatus.DRAFT)
     
     __table_args__ = (
-        # 唯一约束：同一个工作空间内 slug 唯一
+        # Unique constraint: slug unique within workspace
         UniqueConstraint("workspace_id", "slug", name="uq_wiki_workspace_slug"),
     )
 ```
 
-### QASession 和 QATurn 模型
+### QASession and QATurn Models
 
 ```python
 # app/database/models/qa.py
@@ -178,7 +178,7 @@ class QASession(Base, TimestampMixin, WorkspaceMixin):
     user_id = Column(Integer, nullable=False)
     title = Column(String(500), nullable=True)
     
-    # 关系
+    # Relationships
     turns = relationship("QATurn", back_populates="session", order_by="QATurn.turn_index")
 
 
@@ -193,20 +193,20 @@ class QATurn(Base, TimestampMixin):
     rag_path = Column(String(50), nullable=True)  # "chunk" | "entry" | "page"
     retrieval_count = Column(Integer, nullable=True)
     
-    # 关系
+    # Relationships
     session = relationship("QASession", back_populates="turns")
 ```
 
-## 使用示例
+## Usage Examples
 
-### 创建记录
+### Create Record
 
 ```python
 from app.database.models.raw_file import RawFile, RawFileStatus
 from app.database.session import get_db_session
 
 def create_raw_file(rt: Match3Runtime, filename: str, workspace_id: int) -> int:
-    """创建 RawFile 记录。"""
+    """Create RawFile record."""
     with get_db_session(rt) as session:
         raw_file = RawFile(
             filename=filename,
@@ -222,11 +222,11 @@ def create_raw_file(rt: Match3Runtime, filename: str, workspace_id: int) -> int:
         return raw_file.id
 ```
 
-### 查询记录
+### Query Record
 
 ```python
 def get_pending_files(rt: Match3Runtime, workspace_id: int) -> list[RawFile]:
-    """查询待处理的文件。"""
+    """Query pending files."""
     with get_db_session(rt) as session:
         return session.query(RawFile).filter(
             RawFile.workspace_id == workspace_id,
@@ -234,7 +234,7 @@ def get_pending_files(rt: Match3Runtime, workspace_id: int) -> list[RawFile]:
         ).all()
 ```
 
-### 更新记录
+### Update Record
 
 ```python
 def update_file_status(
@@ -243,7 +243,7 @@ def update_file_status(
     status: RawFileStatus,
     error_message: str | None = None,
 ):
-    """更新文件状态。"""
+    """Update file status."""
     with get_db_session(rt) as session:
         raw_file = session.query(RawFile).filter(RawFile.id == file_id).first()
         if raw_file:
@@ -253,11 +253,11 @@ def update_file_status(
             session.commit()
 ```
 
-### 关联查询
+### Join Query
 
 ```python
 def get_file_with_chunks(rt: Match3Runtime, file_id: int) -> RawFile:
-    """查询文件及其所有块。"""
+    """Query file with all its chunks."""
     with get_db_session(rt) as session:
         return session.query(RawFile).filter(
             RawFile.id == file_id
@@ -266,15 +266,15 @@ def get_file_with_chunks(rt: Match3Runtime, file_id: int) -> RawFile:
         ).first()
 ```
 
-## 数据库迁移 (Alembic)
+## Database Migration (Alembic)
 
-### 初始化 Alembic
+### Initialize Alembic
 
 ```bash
 alembic init alembic
 ```
 
-### 配置 Alembic
+### Configure Alembic
 
 ```python
 # alembic/env.py
@@ -287,83 +287,87 @@ from app.database.models.qa import QASession, QATurn
 target_metadata = Base.metadata
 ```
 
-### 创建迁移
+### Create Migration
 
 ```bash
-# 自动生成迁移脚本
+# Auto-generate migration script
 alembic revision --autogenerate -m "Create raw_files table"
 
-# 手动创建迁移脚本
+# Manually create migration script
 alembic revision -m "Add index to chunks"
 ```
 
-### 执行迁移
+### Execute Migration
 
 ```bash
-# 升级到最新版本
+# Upgrade to latest version
 alembic upgrade head
 
-# 降级一个版本
+# Downgrade one version
 alembic downgrade -1
 
-# 查看迁移历史
+# View migration history
 alembic history
 ```
 
-## 配置参数
+## Configuration Parameters
 
 ### Config (config.yaml)
 
 ```yaml
-database:
-  pool_size: 10          # 连接池大小
-  max_overflow: 20       # 最大溢出连接数
-  pool_timeout: 30       # 连接超时（秒）
-  pool_recycle: 3600     # 连接回收时间（秒）
+runtime:
+  database:
+    provider: postgresql
+    implementations:
+      postgresql:
+        pool_size: 10          # Connection pool size
+        max_overflow: 20       # Max overflow connections
+        pool_timeout: 30       # Connection timeout (seconds)
+        pool_recycle: 3600     # Connection recycle time (seconds)
 ```
 
 ### Env (.env)
 
 ```bash
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=match3
-POSTGRES_USER=match3_user
-POSTGRES_PASSWORD=your_secure_password
+POSTGRESQL_HOST=localhost
+POSTGRESQL_PORT=5432
+POSTGRESQL_DB=match3
+POSTGRESQL_USER=match3_user
+POSTGRESQL_PASSWORD=your_secure_password
 ```
 
-## 性能优化
+## Performance Optimization
 
-### 1. 批量插入
+### 1. Bulk Insert
 
 ```python
 def bulk_insert_chunks(rt: Match3Runtime, chunks_data: list[dict]):
-    """批量插入 chunks。"""
+    """Bulk insert chunks."""
     with get_db_session(rt) as session:
         session.bulk_insert_mappings(Chunk, chunks_data)
         session.commit()
 ```
 
-### 2. 查询优化
+### 2. Query Optimization
 
-- 使用 `joinedload` 预加载关联对象
-- 使用 `selectinload` 优化一对多关系
-- 添加必要的索引
+- Use `joinedload` to preload related objects
+- Use `selectinload` to optimize one-to-many relationships
+- Add necessary indexes
 
 ```python
-# 添加索引
+# Add index
 __table_args__ = (
     Index("idx_chunks_workspace_file", "workspace_id", "raw_file_id"),
 )
 ```
 
-### 3. 连接池管理
+### 3. Connection Pool Management
 
-- 设置合理的 `pool_size` 和 `max_overflow`
-- 使用 `pool_pre_ping=True` 自动检测失效连接
-- 定期回收连接（`pool_recycle`）
+- Set reasonable `pool_size` and `max_overflow`
+- Use `pool_pre_ping=True` to auto-detect stale connections
+- Regularly recycle connections (`pool_recycle`)
 
-## 相关文档
+## Related Documentation
 
-- **[protocol.md](./protocol.md)** — RelationalDB Protocol 定义
-- **[../../design/solution-final/050-data-model/](../../design/solution-final/050-data-model/)** — 数据模型详细设计
+- **[protocol.md](./protocol.md)** — Database Protocol definition
+- **[../../design/solution-final/050-data-model/](../../design/solution-final/050-data-model/)** — Detailed data model design

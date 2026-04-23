@@ -265,8 +265,13 @@ results = adapter.hybrid_search(
 ### Config (config.yaml)
 
 ```yaml
-milvus:
-  consistency_level: Eventually  # Strong | Bounded | Eventually
+runtime:
+  vector_db:
+    provider: milvus
+    implementations:
+      milvus:
+        timeout: 30
+        consistency_level: Eventually  # Strong | Bounded | Eventually
 ```
 
 ### Env (.env)

@@ -1,6 +1,6 @@
 # doc-navigate：PageIndex 长文档检索
 
-本文件介绍 Q&A 服务与 PageIndex 在 doc-navigate 查询中的集成。PageIndex 客户端及检索器的核心实现位于 `020-ingestion/pageindex.md`。
+本文件介绍 Q&A 服务的主入口结构，以及 doc-navigate 路径与 PageIndex 的集成。PageIndex 客户端及检索器的核心实现位于 `020-ingestion/pageindex.md`。
 
 ---
 
@@ -31,19 +31,19 @@ doc-navigate 适用于以下两种场景：
 ### ask() 主入口
 
 ```
-path, method = _select_path(query, raw_file_id, workspace_id)
-session = qa_repo.insert(QASession(status=GENERATING, ...))
+path, complexity = _select_path(query, raw_file_id, workspace_id)
+session = qa_repo.insert(QASession(status=GENERATING, rag_path=path, ...))
 
 gen = {
     RAGPath.PAGE:  _answer_path_page(query, raw_file_id, workspace_id),
     RAGPath.ENTRY: _answer_path_entry(query, workspace_id),
-    RAGPath.CHUNK: _answer_path_chunk(query, workspace_id, method),
+    RAGPath.CHUNK: _answer_path_chunk(query, workspace_id, complexity),
 }[path]
 
 for token in gen:
     yield token                          # SSE streaming
 
-qa_repo.update_answer(session.id, answer="".join(parts), status=DONE)
+qa_repo.update(session  # answer="".join(parts), status=DONE)
 ```
 
 ### _select_path() 路由逻辑
@@ -54,7 +54,7 @@ if raw_file_id:
     if rf.pageindex_doc_id → return (PAGE, None)
 
 # Otherwise: ask AdaptiveRAGRouter
-return AdaptiveRAGRouter(rt).route(query)   # → (ENTRY|CHUNK, method)
+return AdaptiveRAGRouter(rt).route(query)   # → (RAGPath, complexity: str)
 ```
 
 ---
@@ -97,29 +97,21 @@ yield from _stream_llm(system_prompt, f"Wiki page content:\n\n{page.content}\n\n
 
 ## _answer_path_chunk()
 
-**方法路由表**（`ChunkMethod` → 检索函数）：
+`complexity` 字符串通过 `PROFILE_MAP` 映射到 `RetrievalConfig`，由 `HybridSearchEngine` 执行五阶段检索：
 
-| ChunkMethod | 调用 |
-|-------------|------|
-| `NAIVE` | `naive_rag(rt, query, ws)` |
-| `MULTI_QUERY` | `multi_query_rag(rt, query, ws)` |
-| `HYDE` | `hyde_rag(rt, query, ws)` |
-| `HYBRID` | `rerank(query, hybrid_search(rt, query, ws, top_k=150))` |
-| `RERANK` | 同 HYBRID |
-| `CRAG` | `corrective_rag(rt, query, ws)` |
-| `SELF_RAG` | `self_rag(rt, query, ws)` |
-| `GRAPH_RAG` | `graph_rag(rt, query, ws)` |
-| `TEXT2SQL` | `text2sql_rag(rt, query, ws)` |
-| `AGENTIC` | `agentic_rag(rt, query, ws)` |
-| `SPECULATIVE` | `speculative_rag(rt, query, ws)` |
+```python
+from app.rag.retrieval_profiles import PROFILE_MAP
+from app.rag.hybrid_search_engine import HybridSearchEngine
 
-未知 method 回退到 `HYBRID`。
+async def _answer_path_chunk(query, workspace_id, complexity):
+    cfg = PROFILE_MAP.get(complexity, PROFILE_MAP["simple"])
+    chunks = await HybridSearchEngine(rt).search(query, workspace_id, cfg)
 
+    context = "\n\n".join(f"[Source {i+1}]: {c['content']}" for i, c in enumerate(chunks))
+    yield from _stream_llm(system_prompt, f"Retrieved context:\n\n{context}\n\nQuestion: {query}")
 ```
-chunks  = method_map[method]()            # retrieve
-context = "\n\n".join(f"[Source {i+1}]: {c['content']}" for i, c in enumerate(chunks[:8]))
-yield from _stream_llm(system_prompt, f"Retrieved context:\n\n{context}\n\nQuestion: {query}")
-```
+
+complexity → Profile 映射关系见 `030-rag/hybrid-search.md` 第 13 节。
 
 ---
 

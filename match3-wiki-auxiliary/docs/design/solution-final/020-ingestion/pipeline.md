@@ -275,7 +275,7 @@ def _parse_pdf_markitdown(
 语义分块在自然语义边界处切割文本（基于嵌入相似度下降），而非固定字符数。
 
 ```python
-# app/rag/chunk/chunker.py
+# app/rag/chunker.py
 
 from sentence_transformers import SentenceTransformer
 

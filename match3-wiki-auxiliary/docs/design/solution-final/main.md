@@ -97,9 +97,9 @@ design/
 │
 ├── 030-rag/
 │   ├── overview.md                 ← 路径选择逻辑、自适应 RAG 路由器
-│   ├── path-chunk.md               ← 分块语料库上的全部 16 种 RAG 方法
-│   ├── path-entry.md               ← Wiki 编译流水线（OpenKB 五步法）
-│   ├── path-page.md                ← PageIndex 检索实现
+│   ├── hybrid-search.md            ← 可配置 5 阶段检索流水线（所有 chunk 路径方法）
+│   ├── wiki-lookup.md              ← Wiki 编译流水线（OpenKB 五步法）
+│   ├── doc-navigate.md             ← PageIndex 长文档检索
 │   └── multi-agent.md              ← 多智能体 RAG（并行子智能体）
 │
 ├── 040-api/
@@ -271,9 +271,9 @@ SSE 端点使用 `StreamingResponse`，不经过 `ApiResp` 包装。分页列表
 4. `040-api/conventions.md` — 实现共享 API 层（含 Match3Exception + 业务码）
 5. `090-error/error-design.md` — 实现报错体系与结构化日志（越早越好，贯穿全程）
 6. `020-ingestion/pipeline.md` — 实现导入流水线
-7. `030-rag/path-chunk.md` — 实现核心 RAG（大多数查询使用此路径）
-8. `030-rag/path-entry.md` — 实现 Wiki 编译
-9. `030-rag/path-page.md` — 实现 PageIndex 路径
+7. `030-rag/hybrid-search.md` — 实现核心 RAG（大多数查询使用此路径）
+8. `030-rag/wiki-lookup.md` — 实现 Wiki 编译
+9. `030-rag/doc-navigate.md` — 实现 PageIndex 路径
 10. `040-api/qa-api.md` — 接入带 SSE 的 Q&A 端点
 11. `070-rbac/permissions.md` — 添加认证与访问控制
 12. `080-testing/unit-tests.md` — 补充单元测试

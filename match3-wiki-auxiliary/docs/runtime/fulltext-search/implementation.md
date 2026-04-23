@@ -380,9 +380,13 @@ adapter.client.indices.put_settings(
 ### Config (config.yaml)
 
 ```yaml
-elasticsearch:
-  request_timeout: 30    # 请求超时（秒）
-  max_retries: 3         # 最大重试次数
+runtime:
+  fulltext_search:
+    provider: elasticsearch
+    implementations:
+      elasticsearch:
+        request_timeout: 30    # Request timeout (seconds)
+        max_retries: 3         # Max retries
 ```
 
 ### Env (.env)

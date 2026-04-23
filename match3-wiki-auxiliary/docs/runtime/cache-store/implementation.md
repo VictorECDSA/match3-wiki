@@ -24,9 +24,8 @@ def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
     
     redis_client = Redis.from_url(
         env.REDIS_CACHE_URL,
-        max_connections=config.redis.max_connections,
-        socket_timeout=config.redis.socket_timeout,
-        socket_connect_timeout=config.redis.socket_connect_timeout,
+        max_connections=config.runtime.cache_store.implementations.redis.max_connections,
+        socket_timeout=config.runtime.cache_store.implementations.redis.socket_timeout,
         decode_responses=True,
     )
     
@@ -50,10 +49,13 @@ REDIS_CACHE_URL=redis://localhost:6379/0
 ### 配置文件 (`config.yaml`)
 
 ```yaml
-redis:
-  max_connections: 50
-  socket_timeout: 5
-  socket_connect_timeout: 5
+runtime:
+  cache_store:
+    provider: redis
+    implementations:
+      redis:
+        max_connections: 50
+        socket_timeout: 5
 ```
 
 ## 配置类

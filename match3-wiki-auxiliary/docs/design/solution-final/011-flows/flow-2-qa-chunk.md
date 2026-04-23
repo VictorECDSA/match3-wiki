@@ -20,7 +20,7 @@ sequenceDiagram
     participant Reranker as Reranker<br/>(cross-encoder)
     participant LLM as LLM<br/>(rt.llm)
 
-    客户端->>API: GET /api/v1/qa/ask<br/>(query, workspace_id, session_id) [SSE]
+    客户端->>API: POST /api/v1/qa/ask<br/>(query, workspace_id, session_id) [SSE]
     activate API
     API->>SVC: ask(query, workspace_id, session_id)
     activate SVC
@@ -99,8 +99,8 @@ sequenceDiagram
 | 10 | RAG → PostgreSQL | 向量库只存储 ID 和向量，不存文本内容；用 RRF 得到的 ID 列表批量查询 PostgreSQL 的 `t_text_chunks` 表，取回完整 `content` 字段。 |
 | 11 | RAG → QAService | 返回 50 个带内容的候选块，供重排序使用。 |
 | 12 | QAService → Reranker | 调用 `rerank()`，将查询与每个候选块组成 (query, passage) 对，批量送入 cross-encoder（`ms-marco-MiniLM-L-6-v2`）精算语义相关度，取 top-8。Cross-encoder 精度远高于 bi-encoder，但计算量大，故只对 50 个候选做精排而非全量。 |
-| 13 | QAService → PostgreSQL（写入） | 在 `t_qa_records` 插入一条记录，初始状态 `GENERATING`，记录本次问答的 session_id 和原始问题，为后续用量统计和历史查询提供数据。 |
+| 13 | QAService → PostgreSQL（写入） | 在 `t_qa_sessions` 插入一条记录，初始状态 `GENERATING`，记录本次问答的 session_id 和原始问题，为后续用量统计和历史查询提供数据。 |
 | 14 | QAService → LLM（流式） | 将 top-8 文本块拼接为 context，构造 system prompt（角色 + 引用格式要求）和 user message（问题），调用 `rt.llm.stream()` 获取流式 token 生成器。 |
 | 15 | LLM → 客户端（token 循环） | 每产生一个 token，依次经 QAService → API → 客户端推送，格式为标准 SSE `data: <token>\n\n`。客户端用 `EventSource` 监听并实时拼接显示，实现打字机效果。 |
-| 16 | QAService → PostgreSQL（更新） | 流式生成结束后，将完整 answer 文本、来源块 ID 列表和最终状态 `DONE` 写回 `t_qa_records`，支持历史回顾和来源溯源。 |
+| 16 | QAService → PostgreSQL（更新） | 流式生成结束后，将完整 answer 文本、来源块 ID 列表和最终状态 `DONE` 写回 `t_qa_sessions`，支持历史回顾和来源溯源。 |
 | 17 | API → 客户端（结束信号） | 推送 `data: [DONE]\n\n`，客户端据此关闭 SSE 连接，更新 UI 状态（停止 loading 动画，显示来源引用）。 |

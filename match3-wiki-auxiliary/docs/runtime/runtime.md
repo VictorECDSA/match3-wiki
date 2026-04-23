@@ -30,7 +30,7 @@ backend/
 │       │   ├── graph_db.py               # GraphDatabase Protocol
 │       │   ├── query_result.py           # GraphQueryResult Protocol
 │       │   └── transaction.py            # GraphTransaction Protocol
-│       ├── relational_db/
+│       ├── database/
 │       │   ├── __init__.py
 │       │   └── database_engine.py        # DatabaseEngine Protocol
 │       ├── fulltext_search/
@@ -63,7 +63,7 @@ backend/
         │   └── impl_neo4j/
         │       ├── __init__.py
         │       └── neo4j_adapter.py      # Neo4j 实现
-        ├── relational_db/
+        ├── database/
         │   └── impl_postgresql/
         │       ├── __init__.py
         │       └── sqlalchemy_adapter.py # SQLAlchemy 实现
@@ -166,7 +166,7 @@ from backend.runtime.protocols.cache_store import CacheStore
 from backend.runtime.protocols.message_queue import MessageQueue
 from backend.runtime.protocols.vector_db import VectorDatabase
 from backend.runtime.protocols.graph_db import GraphDatabase
-from backend.runtime.protocols.relational_db import DatabaseEngine
+from backend.runtime.protocols.database import DatabaseEngine
 from backend.runtime.protocols.fulltext_search import FullTextSearch
 from backend.runtime.protocols.object_storage import ObjectStorage
 
@@ -322,70 +322,71 @@ MINIO_SECRET_KEY=minioadmin
 ## ⚙️ 配置参数
 
 ```yaml
-# Logger
-logger:
-  level: INFO
-  format: json
-  rotation: 1 day
-  retention: 7 days
+runtime:
+  # Logger
+  logger:
+    level: INFO
+    format: json
+    rotation: 1 day
+    retention: 7 days
 
-# PostgreSQL
-relational_db:
-  provider: postgresql
-  implementations:
-    postgresql:
-      pool_size: 10
-      max_overflow: 20
-      pool_timeout: 30
-      pool_recycle: 3600
+  # PostgreSQL
+  database:
+    provider: postgresql
+    implementations:
+      postgresql:
+        pool_size: 10
+        max_overflow: 20
+        pool_timeout: 30
+        pool_recycle: 3600
 
-# Redis (Cache)
-cache_store:
-  provider: redis
-  implementations:
-    redis:
-      max_connections: 50
-      socket_timeout: 5
+  # Redis (Cache)
+  cache_store:
+    provider: redis
+    implementations:
+      redis:
+        max_connections: 50
+        socket_timeout: 5
 
-# Redis (Message Queue)
-message_queue:
-  provider: redis
-  implementations:
-    redis:
-      max_connections: 50
-      socket_timeout: 5
+  # Redis (Message Queue)
+  message_queue:
+    provider: redis
+    implementations:
+      redis:
+        max_connections: 50
+        socket_timeout: 5
 
-# Milvus
-vector_db:
-  provider: milvus
-  implementations:
-    milvus:
-      timeout: 30
-      consistency_level: Eventually
+  # Milvus
+  vector_db:
+    provider: milvus
+    implementations:
+      milvus:
+        timeout: 30
+        consistency_level: Eventually
 
-# Neo4j
-graph_db:
-  provider: neo4j
-  implementations:
-    neo4j:
-      max_connection_lifetime: 3600
-      max_connection_pool_size: 50
+  # Neo4j
+  graph_db:
+    provider: neo4j
+    implementations:
+      neo4j:
+        max_connection_lifetime: 3600
+        max_connection_pool_size: 50
 
-# Elasticsearch
-fulltext_search:
-  provider: elasticsearch
-  implementations:
-    elasticsearch:
-      request_timeout: 30
-      max_retries: 3
+  # Elasticsearch
+  fulltext_search:
+    provider: elasticsearch
+    implementations:
+      elasticsearch:
+        request_timeout: 30
+        max_retries: 3
 
-# MinIO
-object_storage:
-  provider: minio
-  implementations:
-    minio:
-      bucket: match3-wiki-files
-      secure: false
+  # MinIO
+  object_storage:
+    provider: minio
+    implementations:
+      minio:
+        bucket: match3-wiki-files
+        secure: false
 ```
 
 ---

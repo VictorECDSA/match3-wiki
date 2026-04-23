@@ -73,28 +73,19 @@ backend/
 │   ├── rag/
 │   │   ├── __init__.py
 │   │   ├── router.py                   # AdaptiveRAG：将查询路由至对应 path
+│   │   ├── chunker.py                  # markdown_header / fixed_size chunking
 │   │   │
-│   │   ├── chunk/                      # path-chunk：向量 + BM25 + rerank
-│   │   │   ├── __init__.py
-│   │   │   ├── naive_rag.py
-│   │   │   ├── multi_query_rag.py
-│   │   │   ├── hyde_rag.py
-│   │   │   ├── hybrid_search.py        # Milvus + ES RRF 合并
-│   │   │   ├── reranker.py
-│   │   │   ├── crag.py                 # Corrective RAG
-│   │   │   ├── self_rag.py
-│   │   │   ├── graph_rag.py
-│   │   │   ├── text2sql_rag.py
-│   │   │   ├── agentic_rag.py
-│   │   │   ├── speculative_rag.py
-│   │   │   └── chunker.py              # 语义分块器
+│   │   ├── hybrid_search_engine.py     # HybridSearchEngine: config-driven 5-stage pipeline
+│   │   ├── retrieval_config.py         # RetrievalConfig, RerankLevel, ValidationMode
+│   │   ├── retrieval_profiles.py       # PROFILE_MAP: complexity → RetrievalConfig
+│   │   ├── multi_agent.py              # multi-agent RAG (domain agents + verifier + writer)
 │   │   │
-│   │   ├── entry/                      # path-entry：wiki 编译 + 查询
+│   │   ├── entry/                      # wiki-lookup: wiki compile + query
 │   │   │   ├── __init__.py
-│   │   │   ├── compile_pipeline.py     # 5 步 OpenKB 流水线
+│   │   │   ├── compile_pipeline.py     # 5-step OpenKB pipeline
 │   │   │   └── entry_lookup.py
 │   │   │
-│   │   └── page/                       # path-page：PageIndex 长文档
+│   │   └── page/                       # doc-navigate: PageIndex long-document retrieval
 │   │       ├── __init__.py
 │   │       └── pageindex_retriever.py
 │   │

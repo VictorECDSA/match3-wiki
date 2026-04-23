@@ -123,7 +123,7 @@ graph.upsert_relations_batch([
 
 ## GraphRAG 查询（RAG 侧）
 
-详见 `030-rag/path-chunk.md` 方法 11（GraphRAG）。流程概要：
+详见 `030-rag/hybrid-search.md` 第 3.4 节（图谱建索引）和第 4 节（Graph 通道检索）。流程概要：
 
 ```
 entities   = llm.extract_entities(query)           # → list[str]

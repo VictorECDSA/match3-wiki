@@ -21,7 +21,7 @@
 ```python
 # backend/runtime/protocols/object_storage/object_storage.py
 from typing import Protocol, BinaryIO, Iterator
-from .storage_object import StorageObject
+from backend.runtime.protocols.object_storage.storage_object import StorageObject
 
 class ObjectStorage(Protocol):
     """S3-compatible object storage protocol."""

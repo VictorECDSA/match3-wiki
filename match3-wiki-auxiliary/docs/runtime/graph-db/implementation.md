@@ -26,7 +26,7 @@ from app.common.constants import codes
 from backend.config import Config, Env
 from backend.runtime.protocols.logger.logger import Logger
 from backend.runtime.protocols.graph_db.graph_db import GraphDatabase
-from .impl_neo4j.neo4j_graph_db import Neo4jGraphDatabase
+from backend.runtime_impl.implements.graph_db.impl_neo4j.neo4j_graph_db import Neo4jGraphDatabase
 
 def create_graph_database(config: Config, env: Env, logger: Logger) -> GraphDatabase:
     provider = config.runtime.graph_db.provider
@@ -65,7 +65,7 @@ from contextlib import contextmanager
 from typing import ContextManager
 from neo4j import Driver
 from backend.runtime.protocols.graph_db.graph_session import GraphSession
-from .neo4j_graph_session import Neo4jGraphSession
+from backend.runtime_impl.implements.graph_db.impl_neo4j.neo4j_graph_session import Neo4jGraphSession
 
 class Neo4jGraphDatabase:
     """Neo4j implementation of GraphDatabase protocol."""
@@ -98,8 +98,8 @@ from app.common.exceptions import Match3Exception
 from app.common.constants import codes
 from backend.runtime.protocols.graph_db.graph_transaction import GraphTransaction
 from backend.runtime.protocols.graph_db.graph_query_result import GraphQueryResult
-from .neo4j_graph_transaction import Neo4jGraphTransaction
-from .neo4j_graph_query_result import Neo4jGraphQueryResult
+from backend.runtime_impl.implements.graph_db.impl_neo4j.neo4j_graph_transaction import Neo4jGraphTransaction
+from backend.runtime_impl.implements.graph_db.impl_neo4j.neo4j_graph_query_result import Neo4jGraphQueryResult
 
 class Neo4jGraphSession:
     """Wraps neo4j.Session as GraphSession protocol."""
@@ -141,7 +141,7 @@ from neo4j import Transaction as Neo4jTx
 from app.common.exceptions import Match3Exception
 from app.common.constants import codes
 from backend.runtime.protocols.graph_db.graph_query_result import GraphQueryResult
-from .neo4j_graph_query_result import Neo4jGraphQueryResult
+from backend.runtime_impl.implements.graph_db.impl_neo4j.neo4j_graph_query_result import Neo4jGraphQueryResult
 
 class Neo4jGraphTransaction:
     """Wraps neo4j.Transaction as GraphTransaction protocol."""

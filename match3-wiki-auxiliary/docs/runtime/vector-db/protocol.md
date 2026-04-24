@@ -21,7 +21,7 @@
 ```python
 # backend/runtime/protocols/vector_db/vector_db.py
 from typing import Protocol, Any
-from .vector_search_result import VectorSearchResult
+from backend.runtime.protocols.vector_db.vector_search_result import VectorSearchResult
 
 class VectorDatabase(Protocol):
     """Vector database protocol (sync; hybrid dense + sparse)."""

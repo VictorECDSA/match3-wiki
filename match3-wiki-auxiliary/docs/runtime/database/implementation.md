@@ -24,7 +24,7 @@ from app.common.constants import codes
 from backend.config import Config, Env
 from backend.runtime.protocols.logger.logger import Logger
 from backend.runtime.protocols.database.database_engine import DatabaseEngine
-from .impl_postgresql.postgresql_engine import PostgreSQLEngine
+from backend.runtime_impl.implements.database.impl_postgresql.postgresql_engine import PostgreSQLEngine
 
 def create_database_engine(config: Config, env: Env, logger: Logger) -> DatabaseEngine:
     provider = config.runtime.database.provider
@@ -74,7 +74,7 @@ from sqlalchemy.orm import Session
 from app.common.exceptions import Match3Exception
 from app.common.constants import codes
 from backend.runtime.protocols.database.database_session import DatabaseSession
-from .postgresql_session import PostgreSQLSession
+from backend.runtime_impl.implements.database.impl_postgresql.postgresql_session import PostgreSQLSession
 
 class PostgreSQLEngine:
     """PostgreSQL + SQLAlchemy implementation of DatabaseEngine protocol."""

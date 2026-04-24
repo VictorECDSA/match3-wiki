@@ -47,14 +47,14 @@ Protocol 层 (backend/runtime/protocols/)
 from dataclasses import dataclass
 from backend.config import Config
 from backend.env import Env
-from backend.runtime.protocols.logger import Logger
-from backend.runtime.protocols.cache_store import CacheStore
-from backend.runtime.protocols.message_queue import MessageQueue
-from backend.runtime.protocols.vector_db import VectorDatabase
-from backend.runtime.protocols.graph_db import GraphDatabase
-from backend.runtime.protocols.database import DatabaseEngine
-from backend.runtime.protocols.fulltext_search import FullTextSearch
-from backend.runtime.protocols.object_storage import ObjectStorage
+from backend.runtime.protocols.logger.logger import Logger
+from backend.runtime.protocols.cache_store.cache_store import CacheStore
+from backend.runtime.protocols.message_queue.message_queue import MessageQueue
+from backend.runtime.protocols.vector_db.vector_db import VectorDatabase
+from backend.runtime.protocols.graph_db.graph_db import GraphDatabase
+from backend.runtime.protocols.database.database_engine import DatabaseEngine
+from backend.runtime.protocols.fulltext_search.fulltext_search import FullTextSearch
+from backend.runtime.protocols.object_storage.object_storage import ObjectStorage
 
 @dataclass(frozen=True)
 class Match3Runtime:
@@ -116,15 +116,15 @@ class Match3Runtime:
 from backend.runtime.runtime import Match3Runtime
 from backend.config import Config
 from backend.env import Env
-from backend.runtime.protocols.logger import Logger
+from backend.runtime.protocols.logger.logger import Logger
 
-from .implements.cache_store.cache_store import create_cache_store
-from .implements.message_queue.message_queue import create_message_queue
-from .implements.vector_db.vector_db import create_vector_database
-from .implements.graph_db.graph_db import create_graph_database
-from .implements.database.database import create_database_engine
-from .implements.fulltext_search.fulltext_search import create_fulltext_search
-from .implements.object_storage.object_storage import create_object_storage
+from backend.runtime_impl.implements.cache_store.cache_store import create_cache_store
+from backend.runtime_impl.implements.message_queue.message_queue import create_message_queue
+from backend.runtime_impl.implements.vector_db.vector_db import create_vector_database
+from backend.runtime_impl.implements.graph_db.graph_db import create_graph_database
+from backend.runtime_impl.implements.database.database import create_database_engine
+from backend.runtime_impl.implements.fulltext_search.fulltext_search import create_fulltext_search
+from backend.runtime_impl.implements.object_storage.object_storage import create_object_storage
 
 def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
     logger.info("Building runtime")

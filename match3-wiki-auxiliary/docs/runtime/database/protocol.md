@@ -21,7 +21,7 @@
 ```python
 # backend/runtime/protocols/database/database_engine.py
 from typing import Protocol, ContextManager
-from .database_session import DatabaseSession
+from backend.runtime.protocols.database.database_session import DatabaseSession
 
 class DatabaseEngine(Protocol):
     """Relational database engine protocol."""

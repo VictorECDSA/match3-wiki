@@ -23,7 +23,7 @@
 ```python
 # backend/runtime/protocols/graph_db/graph_db.py
 from typing import Protocol, ContextManager
-from .graph_session import GraphSession
+from backend.runtime.protocols.graph_db.graph_session import GraphSession
 
 class GraphDatabase(Protocol):
     """Graph database driver protocol."""
@@ -45,8 +45,8 @@ class GraphDatabase(Protocol):
 ```python
 # backend/runtime/protocols/graph_db/graph_session.py
 from typing import Protocol, Any
-from .graph_transaction import GraphTransaction
-from .graph_query_result import GraphQueryResult
+from backend.runtime.protocols.graph_db.graph_transaction import GraphTransaction
+from backend.runtime.protocols.graph_db.graph_query_result import GraphQueryResult
 
 class GraphSession(Protocol):
     """Graph session protocol."""
@@ -72,7 +72,7 @@ class GraphSession(Protocol):
 ```python
 # backend/runtime/protocols/graph_db/graph_transaction.py
 from typing import Protocol, Any
-from .graph_query_result import GraphQueryResult
+from backend.runtime.protocols.graph_db.graph_query_result import GraphQueryResult
 
 class GraphTransaction(Protocol):
     """Explicit Cypher transaction."""

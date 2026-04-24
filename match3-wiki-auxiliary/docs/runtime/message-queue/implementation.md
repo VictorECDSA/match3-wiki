@@ -23,7 +23,7 @@ from app.common.constants import codes
 from backend.config import Config, Env
 from backend.runtime.protocols.logger.logger import Logger
 from backend.runtime.protocols.message_queue.message_queue import MessageQueue
-from .impl_redis.redis_message_queue import RedisMessageQueue
+from backend.runtime_impl.implements.message_queue.impl_redis.redis_message_queue import RedisMessageQueue
 
 def create_message_queue(config: Config, env: Env, logger: Logger) -> MessageQueue:
     provider = config.runtime.message_queue.provider

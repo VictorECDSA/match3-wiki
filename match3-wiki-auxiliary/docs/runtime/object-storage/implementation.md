@@ -24,7 +24,7 @@ from app.common.constants import codes
 from backend.config import Config, Env
 from backend.runtime.protocols.logger.logger import Logger
 from backend.runtime.protocols.object_storage.object_storage import ObjectStorage
-from .impl_minio.minio_object_storage import MinIOObjectStorage
+from backend.runtime_impl.implements.object_storage.impl_minio.minio_object_storage import MinIOObjectStorage
 
 def create_object_storage(config: Config, env: Env, logger: Logger) -> ObjectStorage:
     provider = config.runtime.object_storage.provider
@@ -68,7 +68,7 @@ from minio import Minio
 from minio.error import S3Error
 from app.common.exceptions import Match3Exception
 from app.common.constants import codes
-from .minio_storage_object import MinIOStorageObject
+from backend.runtime_impl.implements.object_storage.impl_minio.minio_storage_object import MinIOStorageObject
 
 class MinIOObjectStorage:
     """MinIO implementation of ObjectStorage protocol."""

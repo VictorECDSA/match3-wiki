@@ -21,7 +21,7 @@
 ```python
 # backend/runtime/protocols/fulltext_search/fulltext_search.py
 from typing import Protocol, Any
-from .search_result import SearchResult
+from backend.runtime.protocols.fulltext_search.search_result import SearchResult
 
 class FullTextSearch(Protocol):
     """Full-text search engine protocol."""

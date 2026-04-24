@@ -20,7 +20,7 @@ from app.common.constants import codes
 from backend.config import Config
 from backend.runtime.protocols.logger.logger import Logger
 from backend.runtime.protocols.logger.log_config import LogConfig
-from .impl_loguru.loguru_logger import LoguruLogger
+from backend.runtime_impl.implements.logger.impl_loguru.loguru_logger import LoguruLogger
 
 def create_logger(config: Config) -> Logger:
     cfg = config.runtime.logger

@@ -24,7 +24,7 @@ from app.common.constants import codes
 from backend.config import Config, Env
 from backend.runtime.protocols.logger.logger import Logger
 from backend.runtime.protocols.vector_db.vector_db import VectorDatabase
-from .impl_milvus.milvus_vector_db import MilvusVectorDatabase
+from backend.runtime_impl.implements.vector_db.impl_milvus.milvus_vector_db import MilvusVectorDatabase
 
 def create_vector_database(config: Config, env: Env, logger: Logger) -> VectorDatabase:
     provider = config.runtime.vector_db.provider
@@ -60,7 +60,7 @@ from typing import Any
 from pymilvus import MilvusClient, AnnSearchRequest, RRFRanker
 from app.common.exceptions import Match3Exception
 from app.common.constants import codes
-from .milvus_vector_search_result import MilvusVectorSearchResult
+from backend.runtime_impl.implements.vector_db.impl_milvus.milvus_vector_search_result import MilvusVectorSearchResult
 
 class MilvusVectorDatabase:
     """Milvus implementation of VectorDatabase protocol."""

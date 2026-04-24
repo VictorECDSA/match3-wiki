@@ -24,7 +24,7 @@ from app.common.constants import codes
 from backend.config import Config, Env
 from backend.runtime.protocols.logger.logger import Logger
 from backend.runtime.protocols.fulltext_search.fulltext_search import FullTextSearch
-from .impl_elasticsearch.elasticsearch_search import ElasticsearchSearch
+from backend.runtime_impl.implements.fulltext_search.impl_elasticsearch.elasticsearch_search import ElasticsearchSearch
 
 def create_fulltext_search(config: Config, env: Env, logger: Logger) -> FullTextSearch:
     provider = config.runtime.fulltext_search.provider
@@ -71,7 +71,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 from app.common.exceptions import Match3Exception
 from app.common.constants import codes
-from .elasticsearch_search_result import ElasticsearchSearchResult
+from backend.runtime_impl.implements.fulltext_search.impl_elasticsearch.elasticsearch_search_result import ElasticsearchSearchResult
 
 class ElasticsearchSearch:
     """Elasticsearch implementation of FullTextSearch protocol."""

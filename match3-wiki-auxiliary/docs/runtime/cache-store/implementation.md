@@ -23,7 +23,7 @@ from app.common.constants import codes
 from backend.config import Config, Env
 from backend.runtime.protocols.logger.logger import Logger
 from backend.runtime.protocols.cache_store.cache_store import CacheStore
-from .impl_redis.redis_cache_store import RedisCacheStore
+from backend.runtime_impl.implements.cache_store.impl_redis.redis_cache_store import RedisCacheStore
 
 def create_cache_store(config: Config, env: Env, logger: Logger) -> CacheStore:
     provider = config.runtime.cache_store.provider

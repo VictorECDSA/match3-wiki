@@ -75,7 +75,7 @@ class Match3Runtime:
 
 | 组件 | Protocol | 推荐实现 | 用途 | 配置路径 |
 |------|----------|---------|------|---------|
-| `logger` | `Logger` | Loguru | 结构化日志记录 | `config.runtime.logger` |
+| `logger` | `Logger` | Loguru | 结构化日志记录 (⚠️ 不由 Runtime 创建) | N/A |
 | `cache` | `CacheStore` | Redis | 会话缓存、计数器、限流 | `config.runtime.cache_store` |
 | `queue` | `MessageQueue` | Redis Stream | Celery Broker/Backend | `config.runtime.message_queue` |
 | `vector_db` | `VectorDatabase` | Milvus | 混合向量搜索(稠密+稀疏) | `config.runtime.vector_db` |
@@ -88,38 +88,77 @@ class Match3Runtime:
 
 ## 🚀 使用方式
 
+### 统一工厂函数规范
+
+每个 Runtime 组件都通过 `create_xxx` 工厂函数创建，该函数：
+- **命名规范**：统一使用 `create_` 前缀（如 `create_cache_store`, `create_database_engine`）
+- **参数签名**：`(config: Config, env: Env, logger: Logger)` 三参数
+- **返回类型**：返回实现了对应 Protocol 的具体实例
+- **职责**：根据 `config.runtime.组件名.provider` 自动选择具体实现
+
+**⚠️ 重要**: Logger 不属于 Runtime 管理范围，在调用 `build_runtime()` 之前由业务层自行创建。
+
+**示例签名**：
+```python
+def create_cache_store(config: Config, env: Env, logger: Logger) -> CacheStore:
+    """创建缓存存储实例，根据 provider 自动选择实现"""
+    provider = config.runtime.cache_store.provider
+    
+    if provider == "redis":
+        # 创建 Redis 实现
+        return RedisAdapter(...)
+    else:
+        raise ValueError(f"Unsupported cache_store provider: {provider}")
+```
+
 ### 构建 Runtime
 
-通过 `build_runtime()` 函数在应用启动时初始化:
+通过 `build_runtime()` 函数在应用启动时初始化：
 
 ```python
-# backend/runtime/runtime.py
-from backend.runtime_impl.implements.logger.impl_loguru import create_logger
-from backend.runtime_impl.implements.cache_store.impl_redis import build_cache_client
-# ... 其他 imports
+# backend/runtime_impl/runtime.py
+from backend.runtime.runtime import Match3Runtime
+from backend.config import Config
+from backend.env import Env
+from backend.runtime.protocols.logger import Logger
 
-def build_runtime(config: Config, env: Env) -> Match3Runtime:
+from .implements.cache_store.cache_store import create_cache_store
+from .implements.message_queue.message_queue import create_message_queue
+from .implements.vector_db.vector_db import create_vector_database
+from .implements.graph_db.graph_db import create_graph_database
+from .implements.database.database import create_database_engine
+from .implements.fulltext_search.fulltext_search import create_fulltext_search
+from .implements.object_storage.object_storage import create_object_storage
+
+def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
     """构建 Match3 Runtime 实例
     
     执行流程:
-    1. 创建 Logger (最先初始化,供后续组件使用)
-    2. 使用 config + env + logger 初始化各个客户端
+    1. 接收业务层创建的 Logger
+    2. 使用统一的 create_xxx 工厂函数初始化各个组件
     3. 返回不可变 Runtime 容器
+    
+    Args:
+        config: 配置对象
+        env: 环境变量
+        logger: 日志记录器 (由业务层在调用前创建)
+    
+    Returns:
+        完整的 Runtime 实例
     """
-    logger = create_logger(config)
     logger.info("Building runtime...")
     
     return Match3Runtime(
         config=config,
         env=env,
         logger=logger,
-        cache=build_cache_client(config, env, logger),
-        queue=build_queue_client(config, env, logger),
-        vector_db=build_vector_db_client(config, env, logger),
-        graph_db=build_graph_db_client(config, env, logger),
-        db=build_db_engine(config, env, logger),
-        search=build_search_client(config, env, logger),
-        storage=build_storage_client(config, env, logger),
+        cache=create_cache_store(config, env, logger),
+        queue=create_message_queue(config, env, logger),
+        vector_db=create_vector_database(config, env, logger),
+        graph_db=create_graph_database(config, env, logger),
+        db=create_database_engine(config, env, logger),
+        search=create_fulltext_search(config, env, logger),
+        storage=create_object_storage(config, env, logger),
     )
 ```
 
@@ -128,6 +167,18 @@ def build_runtime(config: Config, env: Env) -> Match3Runtime:
 业务代码通过依赖注入接收 `Match3Runtime`,只依赖 Protocol 接口:
 
 ```python
+# 应用启动入口 (如 FastAPI startup)
+from backend.config import load_config
+from backend.env import load_env
+from backend.runtime_impl.implements.logger.logger import create_logger
+from backend.runtime_impl.runtime import build_runtime
+
+# 初始化流程
+config = load_config("config.yaml")
+env = load_env()
+logger = create_logger(config)  # Logger 在 Runtime 外创建
+runtime = build_runtime(config, env, logger)  # 传入 logger
+
 # 业务层代码 (API/RAG/Celery)
 async def process_document(rt: Match3Runtime, doc_id: int):
     """处理文档 (只依赖 Protocol)"""
@@ -332,7 +383,7 @@ MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 ```
 
-**注意**: Logger 无环境变量,完全通过 `config.runtime.logger` 配置。
+**注意**: Logger 不由 Runtime 管理，配置方式由业务层决定。
 
 ---
 
@@ -340,75 +391,63 @@ MINIO_SECRET_KEY=minioadmin
 
 ```
 backend/
-├── runtime/                              # Protocol 层 (抽象接口)
-│   ├── runtime.py                        # Match3Runtime 定义 + build_runtime()
+├── runtime/
+│   ├── runtime.py                        # Match3Runtime 容器定义
 │   └── protocols/
 │       ├── logger/
-│       │   ├── __init__.py
 │       │   ├── logger.py                 # Logger Protocol
 │       │   └── log_config.py             # LogConfig 数据类
 │       ├── cache_store/
-│       │   ├── __init__.py
 │       │   └── cache_store.py            # CacheStore Protocol
 │       ├── message_queue/
-│       │   ├── __init__.py
 │       │   └── message_queue.py          # MessageQueue Protocol
 │       ├── vector_db/
-│       │   ├── __init__.py
 │       │   ├── vector_db.py              # VectorDatabase Protocol
 │       │   └── search_result.py          # VectorSearchResult 数据类
 │       ├── graph_db/
-│       │   ├── __init__.py
 │       │   ├── graph_db.py               # GraphDatabase Protocol
 │       │   ├── query_result.py           # GraphQueryResult 数据类
 │       │   └── transaction.py            # GraphTransaction Protocol
 │       ├── database/
-│       │   ├── __init__.py
 │       │   └── database_engine.py        # DatabaseEngine Protocol
 │       ├── fulltext_search/
-│       │   ├── __init__.py
 │       │   └── fulltext_search.py        # FullTextSearch Protocol
 │       └── object_storage/
-│           ├── __init__.py
 │           └── object_storage.py         # ObjectStorage Protocol
 │
-└── runtime_impl/                         # 实现层 (具体实现)
+└── runtime_impl/
+    ├── runtime.py                        # build_runtime() 定义
     └── implements/
         ├── logger/
+        │   ├── logger.py                 # create_logger(config)
         │   └── impl_loguru/
-        │       ├── __init__.py
-        │       ├── loguru_logger.py      # LoguruLogger 实现
-        │       └── logger_factory.py     # create_logger()
+        │       └── loguru_logger.py      # LoguruLogger 实现
         ├── cache_store/
+        │   ├── cache_store.py            # create_cache_store(config, env, logger)
         │   └── impl_redis/
-        │       ├── __init__.py
         │       └── redis_adapter.py      # RedisAdapter 实现
         ├── message_queue/
+        │   ├── message_queue.py          # create_message_queue(config, env, logger)
         │   └── impl_redis/
-        │       ├── __init__.py
         │       └── redis_adapter.py      # RedisMessageQueue 实现
         ├── vector_db/
+        │   ├── vector_db.py              # create_vector_database(config, env, logger)
         │   └── impl_milvus/
-        │       ├── __init__.py
         │       └── milvus_adapter.py     # MilvusAdapter 实现
         ├── graph_db/
+        │   ├── graph_db.py               # create_graph_database(config, env, logger)
         │   └── impl_neo4j/
-        │       ├── __init__.py
         │       └── neo4j_adapter.py      # Neo4jAdapter 实现
         ├── database/
+        │   ├── database.py               # create_database_engine(config, env, logger)
         │   └── impl_postgresql/
-        │       ├── __init__.py
-        │       └── sqlalchemy_adapter.py # PostgreSQLEngine 实现
+        │       └── postgresql_adapter.py # PostgreSQLEngine 实现
         ├── fulltext_search/
+        │   ├── fulltext_search.py        # create_fulltext_search(config, env, logger)
         │   └── impl_elasticsearch/
-        │       ├── __init__.py
         │       └── es_adapter.py         # ElasticsearchAdapter 实现
         └── object_storage/
+            ├── object_storage.py         # create_object_storage(config, env, logger)
             └── impl_minio/
-                ├── __init__.py
                 └── minio_adapter.py      # MinIOAdapter 实现
 ```
-
-**目录说明**:
-- `backend/runtime/`: Protocol 定义,零外部依赖,业务层直接依赖
-- `backend/runtime_impl/`: 具体实现,依赖第三方库,通过 `build_runtime()` 注入

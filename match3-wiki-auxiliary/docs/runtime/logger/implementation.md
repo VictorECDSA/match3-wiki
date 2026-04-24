@@ -1,34 +1,52 @@
-# Logger Implementation
+# Logger Implementation — Loguru
 
-Logger implementation using **Loguru** library.
+## 概述
 
----
+使用 **Loguru** 实现 `Logger` Protocol，提供结构化日志记录能力。
 
-## 🛠️ 实现技术栈
-
-- **Protocol**: `Logger` (anim-core)
-- **库**: [Loguru](https://github.com/Delgan/loguru)
-- **配置**: config.yaml + LogConfig
-- **格式**: JSON / Text
-- **输出**: Console + File (with rotation)
+**⚠️ 特殊说明**: Logger 不由 Runtime 管理，应在调用 `build_runtime()` **之前**由业务层创建，然后作为参数传入。
 
 ---
 
-## 📦 适配器实现
-
-### LoguruLogger
+## 工厂函数
 
 ```python
-# app/runtime/dependencies/logger/loguru/loguru_logger.py
+# backend/runtime_impl/implements/logger/logger.py
+from backend.config import Config
+from backend.runtime.protocols.logger import Logger, LogConfig
+from .impl_loguru.loguru_logger import LoguruLogger
+
+def create_logger(config: Config) -> Logger:
+    """创建 Logger 实例 (由业务层调用，不在 build_runtime 中)
+    
+    Args:
+        config: 配置对象
+    
+    Returns:
+        实现了 Logger Protocol 的 LoguruLogger 实例
+    """
+    log_config = LogConfig(
+        level=config.runtime.logger.level,
+        format=config.runtime.logger.format,
+        rotation=config.runtime.logger.rotation,
+        retention=config.runtime.logger.retention,
+        log_file="logs/match3-wiki.log"
+    )
+    return LoguruLogger(log_config)
+```
+
+---
+
+## 适配器实现
+
+```python
+# backend/runtime_impl/implements/logger/impl_loguru/loguru_logger.py
+import sys
 from loguru import logger as loguru_logger
-from anim_core.runtime.dependencies.logger.logger import Logger, LogConfig
+from backend.runtime.protocols.logger import Logger, LogConfig
 
 class LoguruLogger:
-    """Loguru-based logger implementation
-    
-    Note: LoguruLogger satisfies Logger Protocol through structural subtyping.
-    No need to explicitly inherit from Logger (Protocol).
-    """
+    """Loguru 适配器，实现 Logger Protocol"""
     
     def __init__(self, config: LogConfig):
         self._logger = loguru_logger
@@ -36,11 +54,11 @@ class LoguruLogger:
         self._configure()
     
     def _configure(self) -> None:
-        """Configure loguru logger based on config"""
-        # Remove default handler
+        """根据配置初始化 loguru"""
+        # 移除默认 handler
         self._logger.remove()
         
-        # Determine format
+        # 确定格式
         if self._config.format == "json":
             log_format = (
                 "{"
@@ -51,7 +69,7 @@ class LoguruLogger:
                 '"line": {line}'
                 "}"
             )
-        else:  # text format
+        else:  # text 格式
             log_format = (
                 "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
                 "<level>{level: <8}</level> | "
@@ -59,7 +77,7 @@ class LoguruLogger:
                 "<level>{message}</level>"
             )
         
-        # Add console handler
+        # 添加控制台 handler
         self._logger.add(
             sys.stderr,
             format=log_format,
@@ -67,7 +85,7 @@ class LoguruLogger:
             colorize=(self._config.format == "text")
         )
         
-        # Add file handler if specified
+        # 添加文件 handler
         if self._config.log_file:
             self._logger.add(
                 self._config.log_file,
@@ -99,100 +117,33 @@ class LoguruLogger:
 
 ---
 
-## Runtime 集成
-
-### 构建函数
-
-```python
-# app/runtime/dependencies/logger/logger_factory.py
-from anim_core.runtime.dependencies.logger.logger import Logger, LogConfig
-from app.runtime.dependencies.logger.loguru.loguru_logger import LoguruLogger
-
-def create_logger(config: Config) -> Logger:
-    """Create logger instance from application config"""
-    log_config = LogConfig(
-        level=config.runtime.logger.level,
-        format=config.runtime.logger.format,
-        rotation=config.runtime.logger.rotation,
-        retention=config.runtime.logger.retention,
-        log_file="logs/match3-wiki.log"
-    )
-    return LoguruLogger(log_config)
-```
-
-### build_runtime 中的使用
-
-```python
-# app/runtime.py
-def build_runtime(config: Config, env: Env) -> Match3Runtime:
-    """构建 Runtime 实例"""
-    
-    # Step 1: 创建 logger
-    logger = create_logger(config)
-    
-    logger.info("Building runtime...")
-    
-    # Step 2: 初始化各个客户端 (使用 config + env + logger)
-    cache = build_cache_client(config, env, logger)
-    queue = build_queue_client(config, env, logger)
-    # ...
-    
-    logger.info("Runtime built successfully")
-    
-    return Match3Runtime(
-        config=config,
-        env=env,
-        logger=logger,
-        cache=cache,
-        queue=queue,
-        # ...
-    )
-```
-
----
-
-## 配置示例
+## 配置参数
 
 ### Config (config.yaml)
 
 ```yaml
 runtime:
   logger:
-    level: INFO
-    format: json  # json or text
-    rotation: 1 day
-    retention: 7 days
+    level: INFO              # 日志级别: DEBUG/INFO/WARNING/ERROR
+    format: json             # 格式: json/text
+    rotation: 1 day          # 轮转周期
+    retention: 7 days        # 保留时长
 ```
 
----
+### 日志格式示例
 
-## 日志格式示例
-
-### JSON 格式
-
+**JSON 格式**:
 ```json
 {"time": "2024-01-15 10:23:45.123", "level": "INFO", "message": "Processing document 123", "file": "processor.py", "line": 45}
 ```
 
-### Text 格式
-
+**Text 格式**:
 ```
 2024-01-15 10:23:45.123 | INFO     | processor:process:45 | Processing document 123
 ```
 
 ---
 
-## 依赖安装
+## 相关文档
 
-```bash
-pip install loguru
-```
-
----
-
-## 注意事项
-
-1. **日志文件自动轮转**: 使用 rotation 配置自动轮转日志文件
-2. **自动压缩**: 旧日志文件自动压缩为 .zip
-3. **保留策略**: 使用 retention 配置自动删除过期日志
-4. **异常追踪**: `exception()` 方法自动记录 traceback
+- **[protocol.md](./protocol.md)** — Logger Protocol 定义

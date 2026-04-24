@@ -82,7 +82,8 @@ BGE-M3 在一次前向传播中同时产出 dense / sparse / colbert；此处仅
 
 ```python
 chunks = chunk_repo.find_by_raw_file_id(raw_file_id)
-dense_vecs, sparse_vecs = rt.embedder.embed_both([c.content for c in chunks])
+embedder = Embedder(openai_client=rt.config.openai_client, bge_model_path=rt.config.bge_model_path)
+dense_vecs, sparse_vecs = embedder.embed_both([c.content for c in chunks])
 
 rows = [{
     "id": c.id, "workspace_id": c.workspace_id, "raw_file_id": c.raw_file_id,
@@ -90,7 +91,7 @@ rows = [{
     "dense_vector": dense, "sparse_vector": sparse,
 } for c, dense, sparse in zip(chunks, dense_vecs, sparse_vecs)]
 
-MilvusStore(rt.milvus).upsert_chunks(rows)
+MilvusStore(rt.vector_db).upsert_chunks(rows)
 ```
 
 ---
@@ -135,21 +136,23 @@ hits = milvus.hybrid_search(
 
 ```python
 image_chunks = chunk_repo.find_by_raw_file_id_and_type(raw_file_id, CHUNK_TYPE_IMAGE)
-embeddings   = rt.image_embedder.embed_images([c.image_path for c in image_chunks])
+image_embedder = ImageEmbedder(model_path=rt.config.clip_model_path)
+embeddings   = image_embedder.embed_images([c.image_path for c in image_chunks])
 
 rows = [{"id": c.id, "workspace_id": c.workspace_id, "raw_file_id": c.raw_file_id,
          "topic_tags": ",".join(c.topic_tags), "image_path": c.image_path, "embedding": emb}
         for c, emb in zip(image_chunks, embeddings)]
 
-rt.milvus.upsert(collection_name=MILVUS_COLLECTION_IMAGES, data=rows)
+rt.vector_db.upsert(collection_name=MILVUS_COLLECTION_IMAGES, data=rows)
 ```
 
 ### 查询（multimodal_rag.py）
 
 ```python
 # image_search(rt, query, workspace_id, top_k=5)
-query_vec = rt.image_embedder.embed_text(query)   # CLIP text encoder
-hits = rt.milvus.search(
+image_embedder = ImageEmbedder(model_path=rt.config.clip_model_path)
+query_vec = image_embedder.embed_text(query)   # CLIP text encoder
+hits = rt.vector_db.search(
     collection_name=MILVUS_COLLECTION_IMAGES,
     data=[query_vec], anns_field="embedding",
     search_params={"metric_type": "COSINE", "params": {"ef": 128}},

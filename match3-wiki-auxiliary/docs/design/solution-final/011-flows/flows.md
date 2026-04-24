@@ -32,16 +32,16 @@
 ## 导入与查询的数据依赖关系
 
 ```
-流程 1（导入）
+Flow 1 (ingestion)
   │
-  ├── 所有文件 ──► 分块 → Milvus + ES（供 hybrid-search 使用）
-  │                     → Neo4j（供 GraphRAG 使用）
+  ├── all files ──► chunk → Milvus + ES (used by hybrid-search)
+  │                       → Neo4j (used by GraphRAG)
   │
-  └── ≥20页 PDF ──► （同时）PageIndex 建树（供 doc-navigate 使用）
+  └── PDF ≥20 pages ──► (also) PageIndex tree build (used by doc-navigate)
 
-流程 3（Wiki编译）──编译完成──► t_wiki_pages（供 wiki-lookup 使用）
+Flow 3 (wiki compile) ──on publish──► t_wiki_pages (used by wiki-lookup)
 
-流程 2（hybrid-search）  ┐
-流程 4（doc-navigate）   ├── 均从 流程1 的产物中检索
-wiki-lookup              ┘── 从 流程3 的产物中读取
+Flow 2 (hybrid-search)  ┐
+Flow 4 (doc-navigate)   ├── both retrieve from Flow 1 output
+wiki-lookup             ┘── reads from Flow 3 output
 ```

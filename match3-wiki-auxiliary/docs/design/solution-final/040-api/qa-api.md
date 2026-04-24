@@ -19,14 +19,14 @@ POST /api/v1/qa/ask
 { "requestId": "req-abc123",
   "data": { "query": "...", "workspaceId": "ws-001", "userId": "user-001", "rawFileId": null } }
 
-响应：Content-Type: text/event-stream  X-Accel-Buffering: no（禁用 nginx 缓冲）
+Response: Content-Type: text/event-stream  X-Accel-Buffering: no  (disable nginx buffering)
 
 data: {"token": "The"}
 data: {"token": " top"}
 ...
 data: [DONE]
 
-出错时：data: {"error": "...", "code": 420001}  然后流关闭
+On error: data: {"error": "...", "code": 420001}  then stream closes
 ```
 
 ---

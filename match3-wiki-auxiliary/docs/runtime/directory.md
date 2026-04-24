@@ -4,8 +4,8 @@
 
 1. **一个类一个文件**。数据类、Protocol、实现类、异常类都不例外。
 2. 文件名使用蛇形命名，与类名一一对应（`CacheStore` → `cache_store.py`，`RedisCacheStore` → `redis_cache_store.py`）。
-3. **Protocol 层** (`backend/runtime/protocols/`) 零外部依赖。
-4. **实现层** (`backend/runtime_impl/implements/`) 按 provider 分子目录（`impl_<provider>/`），一个 provider 一组文件。
+3. **Protocol 层** (`app/runtime/protocols/`) 零外部依赖。
+4. **实现层** (`app/runtime_impl/implements/`) 按 provider 分子目录（`impl_<provider>/`），一个 provider 一组文件。
 5. 每个组件目录根下的 `<组件>.py` 文件只包含 `create_<组件>()` 工厂函数。
 6. **不使用 `__init__.py`**：所有包均为隐式命名空间包（PEP 420），目录中不存在 `__init__.py`。
 
@@ -14,7 +14,7 @@
 ## Protocol 层
 
 ```
-backend/runtime/
+app/runtime/
 ├── runtime.py                              # Match3Runtime (frozen dataclass)
 └── protocols/
     ├── logger/
@@ -55,7 +55,7 @@ backend/runtime/
 ## 实现层
 
 ```
-backend/runtime_impl/
+app/runtime_impl/
 ├── runtime.py                              # build_runtime()
 └── implements/
     ├── logger/
@@ -111,6 +111,6 @@ backend/runtime_impl/
 ## 命名与导入约定
 
 - **实现类命名**：`<Provider><Capability>`。例如 Redis 同时实现了 `CacheStore` 和 `MessageQueue`，但类名分别是 `RedisCacheStore` 与 `RedisMessageQueue`，分别位于不同的 `impl_redis/` 子目录下。
-- **实现类不导出 Protocol 类型**：业务层不允许从 `runtime_impl` 导入任何符号；只能从 `backend.runtime.protocols.*` 导入。
+- **实现类不导出 Protocol 类型**：业务层不允许从 `runtime_impl` 导入任何符号；只能从 `app.runtime.protocols.*` 导入。
 - **工厂函数只做装配**：`create_xxx()` 内部根据 `config.runtime.<组件>.provider` 分派到对应 `impl_<provider>`，不包含业务逻辑。
 - **新增 provider**：新增 `impl_<new_provider>/` 子目录 + 新增类，然后在对应的 `create_xxx()` 里加一个 `elif` 分支。Protocol、Runtime、业务层均不需要改动。

@@ -5,9 +5,9 @@
 ```python
 # app/rag/router.py
 class RAGPath(str, Enum):
-    CHUNK = "chunk"     # hybrid-search：分块语料库混合检索
-    ENTRY = "entry"     # wiki-lookup：已编译 Wiki 条目查找
-    PAGE  = "page"      # doc-navigate：PageIndex 长文档导航
+    CHUNK = "chunk"     # hybrid-search: chunked corpus hybrid retrieval
+    ENTRY = "entry"     # wiki-lookup: compiled Wiki entry lookup
+    PAGE  = "page"      # doc-navigate: PageIndex long-document navigation
 ```
 
 ---
@@ -15,19 +15,19 @@ class RAGPath(str, Enum):
 ## 路径选择逻辑
 
 ```
-查询到达 QAService.ask()
+Query arrives at QAService.ask()
          │
          ▼
-[1] 请求中是否明确指定了 raw_file_id？
-    ├─ 是 + 文件为 PageIndex 文档 ──────────────────────────► doc-navigate
-    └─ 否 ─────────────────────────────────────────────────►[2]
+[1] Is raw_file_id explicitly specified in the request?
+    ├─ Yes + file is a PageIndex document ──────────────────────────► doc-navigate
+    └─ No ─────────────────────────────────────────────────────────►[2]
 
 [2] AdaptiveRAGRouter.route(query) → (path, complexity)
-    ├─ path == "entry" ──────────────────────────────────────► wiki-lookup
-    ├─ path == "page"  ──────────────────────────────────────► doc-navigate（查找最匹配的文档）
-    └─ path == "chunk" ──────────────────────────────────────►[3]
+    ├─ path == "entry" ──────────────────────────────────────────────► wiki-lookup
+    ├─ path == "page"  ──────────────────────────────────────────────► doc-navigate (find best matching document)
+    └─ path == "chunk" ──────────────────────────────────────────────►[3]
 
-[3] complexity → RetrievalConfig Profile（hybrid-search）
+[3] complexity → RetrievalConfig Profile (hybrid-search)
     ├─ "simple"      → PROFILE_SIMPLE      (Dense+Sparse+BM25, lightweight rerank)
     ├─ "moderate"    → PROFILE_MODERATE    (+ multi_query, cross_encoder rerank)
     ├─ "complex"     → PROFILE_COMPLEX     (+ HyDE + Graph, cross_encoder rerank)
@@ -71,10 +71,14 @@ class AdaptiveRAGRouter:
 
     def route(self, query: str) -> tuple[RAGPath, str]:
         """Classify query, return (path, complexity) tuple."""
+        from app.intelligence.llm import OpenAILLMCaller
+        llm = OpenAILLMCaller(
+            api_key=self._rt.env.OPENAI_API_KEY,
+            model=self._rt.config.llm.default_model,
+        )
         try:
-            content = self._rt.llm.complete(
+            content = llm.complete(
                 messages=[{"role": "user", "content": ROUTER_PROMPT.format(query=query)}],
-                model=self._rt.config.llm.default_model,
                 response_format={"type": "json_object"},
                 max_tokens=100, temperature=0,
             )
@@ -151,8 +155,8 @@ complexity → Profile 映射关系详见 `030-rag/retrieval/hybrid-search.md` �
 ```
 complexity == "complex"
     │
-    ├── 单域查询 ──► HybridSearchEngine(PROFILE_COMPLEX)  [graph=True]
-    └── 多域查询 ──► multi_agent_rag()                    [每个域独立检索]
+    ├── single-domain query ──► HybridSearchEngine(PROFILE_COMPLEX)  [graph=True]
+    └── multi-domain query  ──► multi_agent_rag()                    [each domain retrieves independently]
 ```
 
 多智能体 RAG 详见 `030-rag/retrieval/multi-agent.md`。

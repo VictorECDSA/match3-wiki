@@ -94,7 +94,7 @@
 ### upload()
 
 ```
-1. MIME 检测 → file_type（未知时 guess_type → UNSUPPORTED_FILE_TYPE）
+1. MIME detection → file_type (unknown: guess_type → UNSUPPORTED_FILE_TYPE)
 2. object_key = "{workspace_id}/{raw_file_id}/{filename}"
 3. storage.put_object(object_key, data)              # MINIO_ERROR on failure
 4. raw_file_repo.insert(RawFile(status=PENDING, ...))

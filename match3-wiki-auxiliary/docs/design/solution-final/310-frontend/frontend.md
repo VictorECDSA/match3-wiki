@@ -17,28 +17,28 @@
 
 ```
 app/
-├── [locale]/                         # next-intl 语言前缀（zh / en）
-│   ├── layout.tsx                    # 根布局：主题 Provider、侧边栏、Toast 容器
-│   ├── page.tsx                      # 仪表盘
+├── [locale]/                         # next-intl locale prefix (zh / en)
+│   ├── layout.tsx                    # root layout: theme Provider, sidebar, Toast container
+│   ├── page.tsx                      # dashboard
 │   │
 │   ├── wiki/
-│   │   ├── page.tsx                  # Wiki 列表——按主题列出所有页面
-│   │   ├── [slug]/page.tsx           # Wiki 单页查看器
-│   │   └── compile/page.tsx          # 触发 wiki 编译
+│   │   ├── page.tsx                  # wiki list — all pages grouped by topic
+│   │   ├── [slug]/page.tsx           # wiki single-page viewer
+│   │   └── compile/page.tsx          # trigger wiki compilation
 │   │
 │   ├── raw/
-│   │   ├── page.tsx                  # 原始文件列表
-│   │   └── upload/page.tsx           # 上传并追踪摄入状态
+│   │   ├── page.tsx                  # raw file list
+│   │   └── upload/page.tsx           # upload and track ingest status
 │   │
 │   ├── qa/
-│   │   └── page.tsx                  # Q&A 聊天界面（SSE 流式）
+│   │   └── page.tsx                  # Q&A chat interface (SSE streaming)
 │   │
 │   └── admin/
-│       ├── page.tsx                  # 管理员仪表盘
+│       ├── page.tsx                  # admin dashboard
 │       ├── users/page.tsx
 │       └── workspace/page.tsx
 │
-└── api/                              # Next.js 路由处理器（代理 / BFF，按需使用）
+└── api/                              # Next.js route handlers (proxy / BFF, as needed)
 ```
 
 ---
@@ -51,7 +51,7 @@ app/
 
 ```
 messages/
-├── zh.json       # 简体中文（默认）
+├── zh.json       # Simplified Chinese (default)
 └── en.json       # English
 ```
 
@@ -88,25 +88,25 @@ export const config = { matcher: ["/((?!api|_next|.*\\..*).*)"] };
 // messages/zh.json
 {
   "common": {
-    "loading": "加载中...",
-    "save": "保存",
-    "cancel": "取消",
-    "confirm": "确认",
-    "delete": "删除"
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete"
   },
   "error": {
     "100000": null,
-    "404001": "工作区不存在",
-    "404006": "您不是该工作区的成员",
-    "401003": "权限不足",
-    "404002": "文件不存在",
-    "500000": "服务器内部错误，请稍后重试"
+    "404001": "Workspace not found",
+    "404006": "You are not a member of this workspace",
+    "401003": "Permission denied",
+    "404002": "File not found",
+    "500000": "Internal server error, please try again later"
   },
   "wiki": {
-    "compile": "编译 Wiki",
-    "compiling": "编译中...",
-    "ready": "已就绪",
-    "failed": "编译失败"
+    "compile": "Compile Wiki",
+    "compiling": "Compiling...",
+    "ready": "Ready",
+    "failed": "Compilation failed"
   }
 }
 ```
@@ -215,13 +215,13 @@ export function ThemeToggle() {
 ```typescript
 // lib/constants.ts
 
-// --- API 业务码 ---
-// 维护为 Set，以便未来新增成功码时调用方无需重构。
+// --- API business codes ---
+// Maintained as a Set so adding a new success code in the future requires no caller refactoring.
 export const SUCCESS_CODES = new Set([100000]);
-export const FALLBACK_ERROR_CODE = 500000;   // 无匹配翻译时使用
+export const FALLBACK_ERROR_CODE = 500000;   // used when no matching translation is found
 
-// --- 认证 ---
-export const ACCESS_TOKEN_KEY = "access_token";   // localStorage 存储 JWT 的键名
+// --- Auth ---
+export const ACCESS_TOKEN_KEY = "access_token";   // localStorage key for storing the JWT
 
 // --- SSE ---
 export const SSE_EVENT_TOKEN = "token";
@@ -257,8 +257,8 @@ import { toast } from "sonner";
 import { ApiResp } from "./types";
 import { SUCCESS_CODES, FALLBACK_ERROR_CODE, ACCESS_TOKEN_KEY } from "./constants";
 
-// 错误文案查找表 — key 为业务码字符串。
-// 在应用启动时通过 initErrorMessages() 填充；每次错误响应时查表。
+// Error message lookup table — key is business code as string.
+// Populated via initErrorMessages() at app startup; queried on every error response.
 let _errorMessages: Record<string, string> = {};
 
 export function initErrorMessages(messages: Record<string, string>) {
@@ -304,7 +304,7 @@ async function request<T>(
     },
   });
 
-  // 网络层错误（非 200 HTTP 状态码）。RPC 约定：业务响应始终为 200。
+  // Network-layer error (non-200 HTTP status code). RPC convention: business responses are always 200.
   if (!res.ok) {
     const errText = getErrorText(FALLBACK_ERROR_CODE);
     toast.error(errText);
@@ -320,12 +320,12 @@ async function request<T>(
   const body: ApiResp<T> = await res.json();
 
   if (!SUCCESS_CODES.has(body.code)) {
-    // 将业务码翻译为用户可读文案，显示 toast。
+    // Translate business code to user-readable text and display as toast.
     const userText = getErrorText(body.code);
     toast.error(userText);
 
-    // 记录完整请求+响应上下文，供调试使用。
-    // 生产环境：message 简短；开发环境：message 含完整错误链。
+    // Log full request + response context for debugging.
+    // Production: message is brief; development: message contains full error chain.
     console.error("[API] business error", {
       method,
       url,
@@ -367,19 +367,19 @@ export const api = {
 ### 错误处理流程
 
 ```
-后端响应 { code, message, data }
+Backend response { code, message, data }
         │
-        ├─ SUCCESS_CODES.has(code) ──→ 返回 data，业务正常继续
+        ├─ SUCCESS_CODES.has(code) ──→ return data, business continues normally
         │
-        └─ 否则（业务错误）
-              ├─ code → 翻译表查 user-facing 文案
-              ├─ toast.error(文案)                     ← 用户看到的 Toast（自动消失）
-              ├─ console.error({ method, url, body,    ← 开发者/AI 排查用
+        └─ otherwise (business error)
+              ├─ code → look up user-facing text in translation table
+              ├─ toast.error(text)                      ← Toast shown to user (auto-dismiss)
+              ├─ console.error({ method, url, body,     ← for developer / AI Agent debugging
               │                  code, requestId,
               │                  message })
-              │     生产环境：message 简短
-              │     非生产：message 含完整错误链 JSON
-              └─ throw ApiError(code, 文案)             ← 调用方可按需捕获
+              │     production:     message is brief
+              │     non-production: message contains full error chain JSON
+              └─ throw ApiError(code, text)              ← caller may catch if needed
 ```
 
 **关键设计原则**：
@@ -394,7 +394,7 @@ export const api = {
 在 Root Layout 中将 error 翻译注入 `api.ts`：
 
 ```tsx
-// app/[locale]/layout.tsx（补充部分）
+// app/[locale]/layout.tsx (supplement)
 "use client";
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
@@ -403,7 +403,7 @@ import { initErrorMessages } from "@/lib/api";
 function ApiErrorInit() {
   const t = useTranslations("error");
   useEffect(() => {
-    // 将 error 命名空间下的所有条目作为普通对象传入
+    // Pass all entries under the error namespace as a plain object
     initErrorMessages(
       Object.fromEntries(
         Object.keys(t.raw("")).map((k) => [k, t(k as never)]),
@@ -449,7 +449,7 @@ export function streamAnswer(
     signal: controller.signal,
   }).then(async (res) => {
     if (!res.ok || !res.body) {
-      const msg = "流连接失败";
+      const msg = "stream connection failed";
       toast.error(msg);
       onError(msg);
       return;
@@ -474,18 +474,18 @@ export function streamAnswer(
             const { type, content } = JSON.parse(payload);
             if (type === SSE_EVENT_TOKEN) onToken(content);
             if (type === SSE_EVENT_ERROR) { toast.error(content); onError(content); }
-          } catch { /* 格式异常的数据块，跳过 */ }
+          } catch { /* malformed data chunk, skip */ }
         }
       }
     }
   }).catch((err) => {
     if (err.name !== "AbortError") {
-      toast.error("连接断开");
+      toast.error("connection lost");
       onError(err.message);
     }
   });
 
-  // 返回取消函数
+  // return cancel function
   return () => controller.abort();
 }
 ```
@@ -497,25 +497,25 @@ export function streamAnswer(
 ```
 components/
 ├── shared/
-│   ├── Sidebar.tsx               # 导航侧边栏
-│   ├── TopBar.tsx                # 顶栏（ThemeToggle + 语言切换）
-│   ├── ThemeToggle.tsx           # 深色/浅色切换
-│   ├── LocaleSwitcher.tsx        # zh / en 切换
+│   ├── Sidebar.tsx               # navigation sidebar
+│   ├── TopBar.tsx                # top bar (ThemeToggle + locale switcher)
+│   ├── ThemeToggle.tsx           # dark / light toggle
+│   ├── LocaleSwitcher.tsx        # zh / en switcher
 │   └── LoadingSpinner.tsx
 │
 ├── wiki/
-│   ├── WikiViewer.tsx            # Markdown 渲染器（含 wikilink 支持）
-│   ├── WikiEditor.tsx            # 浏览器内 wiki 编辑（可选）
-│   └── WikiGraph.tsx             # Neo4j 图可视化
+│   ├── WikiViewer.tsx            # Markdown renderer (with wikilink support)
+│   ├── WikiEditor.tsx            # in-browser wiki editor (optional)
+│   └── WikiGraph.tsx             # Neo4j graph visualization
 │
 ├── qa/
-│   ├── QAChat.tsx                # 聊天 UI（SSE token 流式渲染）
+│   ├── QAChat.tsx                # chat UI (SSE token streaming)
 │   ├── QAMessage.tsx
-│   └── SourceCitations.tsx       # 展示检索到的来源 chunk
+│   └── SourceCitations.tsx       # display retrieved source chunks
 │
 └── ingest/
-    ├── IngestDropzone.tsx        # 拖拽文件上传
-    └── IngestStatus.tsx          # 任务状态轮询
+    ├── IngestDropzone.tsx        # drag-and-drop file upload
+    └── IngestStatus.tsx          # task status polling
 ```
 
 ### 语言切换组件
@@ -534,7 +534,7 @@ export function LocaleSwitcher() {
 
   function toggle() {
     const next = locale === "zh" ? "en" : "zh";
-    // 替换当前路径中的语言前缀
+    // replace the locale prefix in the current path
     router.push(pathname.replace(`/${locale}`, `/${next}`));
   }
 

@@ -10,9 +10,9 @@
 
 ```
 tests/
-├── conftest.py                          ← 全局 fixtures（runtime mock、db session 等）
+├── conftest.py                          ← global fixtures (runtime mock, db session, etc.)
 ├── fixtures/
-│   ├── db.py                            ← PostgreSQL 测试 fixture
+│   ├── db.py                            ← PostgreSQL test fixture
 │   ├── milvus.py                        ← Milvus mock fixture
 │   ├── es.py                            ← Elasticsearch mock fixture
 │   ├── neo4j.py                         ← Neo4j mock fixture
@@ -47,7 +47,7 @@ tests/
 │       └── test_codes.py
 │
 ├── integration/
-    ├── test_ingest_pipeline.py          ← 端到端摄入流程（使用 SQLite 内存数据库）
+    ├── test_ingest_pipeline.py          ← end-to-end ingest pipeline (uses SQLite in-memory database)
     └── test_wiki_compile_pipeline.py
 ```
 
@@ -60,7 +60,7 @@ tests/
 pytest>=8.0
 pytest-asyncio>=0.23
 pytest-mock>=3.12
-pytest-json-report>=1.5        # 机器可读测试结果（供 AI 解析）
+pytest-json-report>=1.5        # machine-readable test results (for AI parsing)
 factory-boy>=3.3               # entity factories
 faker>=24.0
 sqlalchemy[aiosqlite]>=2.0     # in-memory SQLite for repo tests
@@ -77,14 +77,14 @@ import pytest
 from unittest.mock import MagicMock
 from sqlalchemy import create_engine
 from app.storage.orm_base import ORMBase
-from app.runtime import Match3Runtime
+from app.runtime.runtime import Match3Runtime
 from app.common.constants import constants
 import logging
 
 
 @pytest.fixture(scope="session")
 def db_engine():
-    """内存 SQLite 引擎——每个 session 只建表一次。"""
+    """In-memory SQLite engine — tables created once per session."""
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     ORMBase.metadata.create_all(engine)
     yield engine
@@ -92,7 +92,7 @@ def db_engine():
 
 
 # ---------------------------------------------------------------------------
-# 配置/环境存根 — 轻量数据对象，非真实校验类
+# Config / env stubs — lightweight data objects, not real validation classes
 # ---------------------------------------------------------------------------
 
 @pytest.fixture()
@@ -123,7 +123,7 @@ def mock_env():
 
 
 # ---------------------------------------------------------------------------
-# 存储层 mock — 直接通过 Runtime 注入
+# Storage-layer mocks — injected directly via Runtime
 # ---------------------------------------------------------------------------
 
 @pytest.fixture()
@@ -166,7 +166,8 @@ def mock_neo4j():
 
 
 # ---------------------------------------------------------------------------
-# 智能接口 mock — Runtime 的所有 Protocol 成员
+# Intelligence-layer mocks — NOT Match3Runtime fields.
+# Inject directly into the function/class under test via monkeypatch or patch.
 # ---------------------------------------------------------------------------
 
 @pytest.fixture()
@@ -226,37 +227,34 @@ def mock_pageindex():
 
 
 # ---------------------------------------------------------------------------
-# 已组装的 Runtime
+# Assembled Runtime — only valid Match3Runtime fields
 # ---------------------------------------------------------------------------
 
 @pytest.fixture()
 def runtime(
     mock_config, mock_env,
-    db_engine, mock_redis, mock_milvus, mock_es, mock_neo4j,
-    mock_llm, mock_embedder, mock_image_embedder,
-    mock_transcriber, mock_reranker, mock_storage, mock_pageindex,
+    db_engine, mock_redis, mock_milvus, mock_es, mock_neo4j, mock_storage,
 ):
-    """所有外部依赖均已 mock 的完整 Match3Runtime。
+    """Fully mocked Match3Runtime.
 
-    所有智能调用（llm.complete、embedder.embed_both、storage.get_object 等）
-    均由 MagicMock 满足——无需网络、无需 API Key、无需 @patch 装饰器。
+    All storage-layer calls (vector_db.search, search.bulk, graph_db.session, storage.get_object, etc.)
+    are satisfied by MagicMock — no network, no API key, no @patch decorator needed.
+
+    Intelligence-layer objects (llm, embedder, reranker, pageindex) are NOT Match3Runtime fields.
+    Use mock_llm / mock_embedder / mock_reranker / mock_pageindex fixtures directly
+    and inject them via monkeypatch or unittest.mock.patch into the code under test.
     """
     return Match3Runtime(
         config=mock_config,
         env=mock_env,
         logger=logging.getLogger("match3.test"),
-        db_engine=db_engine,
-        redis=mock_redis,
-        milvus=mock_milvus,
-        es=mock_es,
-        neo4j=mock_neo4j,
-        llm=mock_llm,
-        embedder=mock_embedder,
-        image_embedder=mock_image_embedder,
-        transcriber=mock_transcriber,
-        reranker=mock_reranker,
+        db=db_engine,
+        cache=mock_redis,
+        queue=mock_redis,
+        vector_db=mock_milvus,
+        search=mock_es,
+        graph_db=mock_neo4j,
         storage=mock_storage,
-        pageindex=mock_pageindex,
     )
 ```
 
@@ -393,7 +391,7 @@ class TestWorkspaceRepo:
         ws = WorkspaceFactory()
         repo.insert(ws)
         repo.delete(ws.id)
-        # 软删除：记录仍存在，但 find_by_id 返回 None（过滤 delete_time IS NULL）
+        # soft delete: record still exists but find_by_id returns None (filters delete_time IS NULL)
         found = repo.find_by_id(ws.id)
         assert found is None
 
@@ -487,19 +485,19 @@ class TestAdaptiveRAGRouter:
 class TestPathChunk:
 
     def test_search_milvus_empty_result_returns_empty_list(self, runtime):
-        runtime.milvus.search.return_value = [[]]
+        runtime.vector_db.search.return_value = [[]]
         from app.rag.path_chunk import PathChunkRAG
         rag = PathChunkRAG(runtime)
         results = rag.vector_search(query_embedding=[0.1] * constants.MILVUS_DENSE_DIM, top_k=5)
         assert results == []
 
     def test_search_returns_deduplicated_rrf_results(self, runtime):
-        """RRF 融合不应返回重复的 chunk ID。"""
+        """RRF fusion must not return duplicate chunk IDs."""
         from app.rag.path_chunk import PathChunkRAG
         rag = PathChunkRAG(runtime)
-        # Milvus 和 ES 均返回同一 chunk
-        runtime.milvus.search.return_value = [[MagicMock(id="chunk-001", score=0.9)]]
-        runtime.es.search.return_value = {
+        # both Milvus and ES return the same chunk
+        runtime.vector_db.search.return_value = [[MagicMock(id="chunk-001", score=0.9)]]
+        runtime.search.search.return_value = {
             "hits": {"hits": [{"_id": "chunk-001", "_score": 5.0}], "total": {"value": 1}}
         }
         results = rag.rrf_fuse(
@@ -524,27 +522,37 @@ from app.common.constants import codes
 class TestIngestTask:
 
     def test_ingest_file_storage_error_raises_match3_exception(self, runtime):
-        # rt.storage 已是 MagicMock — 直接配置失败场景
+        # rt.storage is already a MagicMock — configure failure directly
         runtime.storage.get_object.side_effect = Exception("connection refused")
         from app.workers.tasks.ingest_task import ingest_file
         with pytest.raises(Match3Exception) as exc_info:
             ingest_file.apply(args=["rf-001"]).get()
         assert exc_info.value.resolve_code() == codes.MINIO_ERROR
 
-    def test_ingest_file_llm_parse_error_raises_match3_exception(self, runtime):
-        runtime.storage.get_object.return_value = b"fake pdf bytes"
-        runtime.llm.complete.side_effect = RuntimeError("context length exceeded")
-        from app.workers.tasks.ingest_task import ingest_file
-        with pytest.raises(Match3Exception) as exc_info:
-            ingest_file.apply(args=["rf-002"]).get()
+    def test_ingest_file_llm_parse_error_raises_match3_exception(self, mock_llm):
+        """Intelligence-layer errors must propagate as Match3Exception.
+
+        Patch app.intelligence.llm.OpenAILLMCaller so the task picks up the mock.
+        """
+        from unittest.mock import patch, MagicMock
+        mock_llm.complete.side_effect = RuntimeError("context length exceeded")
+        with patch("app.intelligence.llm.OpenAILLMCaller", return_value=mock_llm):
+            from app.workers.tasks.ingest_task import ingest_file
+            with pytest.raises(Match3Exception) as exc_info:
+                ingest_file.apply(args=["rf-002"]).get()
         assert exc_info.value.resolve_code() == codes.LLM_FAILED
 
-    def test_ingest_file_transcribe_audio_error_raises_whisper_failed(self, runtime):
-        runtime.storage.get_object.return_value = b"fake audio bytes"
-        runtime.transcriber.transcribe.side_effect = RuntimeError("CUDA out of memory")
-        from app.workers.tasks.ingest_task import ingest_file
-        with pytest.raises(Match3Exception) as exc_info:
-            ingest_file.apply(args=["rf-003"]).get()
+    def test_ingest_file_transcribe_audio_error_raises_whisper_failed(self, mock_transcriber):
+        """Whisper errors must propagate as Match3Exception.
+
+        Patch app.intelligence.transcriber.Transcriber so the task picks up the mock.
+        """
+        from unittest.mock import patch
+        mock_transcriber.transcribe.side_effect = RuntimeError("CUDA out of memory")
+        with patch("app.intelligence.transcriber.Transcriber", return_value=mock_transcriber):
+            from app.workers.tasks.ingest_task import ingest_file
+            with pytest.raises(Match3Exception) as exc_info:
+                ingest_file.apply(args=["rf-003"]).get()
         assert exc_info.value.resolve_code() == codes.WHISPER_FAILED
 ```
 
@@ -606,22 +614,22 @@ class TestMatch3Exception:
 ### 开发者常用命令
 
 ```bash
-# 运行全部单元测试
+# run all unit tests
 pytest tests/unit/ -v
 
-# 运行单个测试文件
+# run a single test file
 pytest tests/unit/common/test_exceptions.py -v
 
-# 运行特定测试类
+# run a specific test class
 pytest tests/unit/services/test_admin_service.py::TestAdminService -v
 
-# 运行包含关键词的测试
+# run tests matching a keyword
 pytest tests/ -k "workspace" -v
 
-# 仅运行快速测试（排除集成测试）
+# run only fast tests (exclude integration tests)
 pytest tests/unit/ --ignore=tests/integration/ -v
 
-# 失败立即停止（调试时使用）
+# stop on first failure (useful for debugging)
 pytest tests/unit/ -x
 ```
 
@@ -630,14 +638,14 @@ pytest tests/unit/ -x
 AI Agent 运行测试时，使用 `--json-report` 生成机器可读结果：
 
 ```bash
-# 输出 JSON 报告，AI 解析失败条目
+# output JSON report for AI parsing of failures
 pytest tests/unit/ \
   --tb=short \
   --json-report \
   --json-report-file=test-results.json \
   -q
 
-# 解析失败测试（jq）
+# parse failed tests (jq)
 cat test-results.json | jq '.tests[] | select(.outcome == "failed") | {name: .nodeid, message: .call.longrepr}'
 ```
 
@@ -666,13 +674,13 @@ cat test-results.json | jq '.tests[] | select(.outcome == "failed") | {name: .no
 ### AI Agent 修复失败测试的流程
 
 ```
-1. 运行测试，获取 test-results.json
-2. 筛选 outcome == "failed" 的条目
-3. 读取 call.longrepr 定位断言失败位置（文件名 + 行号）
-4. 读取对应源文件（app/ 中被测代码）
-5. 根据 error_code（如果有）查 codes.py 确认期望行为
-6. 修复代码，重新运行失败测试验证
-7. 确认 outcome == "passed" 后提交
+1. Run tests, obtain test-results.json
+2. Filter entries where outcome == "failed"
+3. Read call.longrepr to locate the assertion failure (filename + line number)
+4. Read the corresponding source file (code under test in app/)
+5. If error_code is present, check codes.py to confirm expected behavior
+6. Fix the code, re-run the failing tests to verify
+7. Confirm outcome == "passed", then commit
 ```
 
 ---
@@ -689,9 +697,9 @@ cat test-results.json | jq '.tests[] | select(.outcome == "failed") | {name: .no
 | `app/api/routers/` | 60% | 路由层薄，重点测 middleware |
 
 ```bash
-# 生成覆盖率报告
+# generate coverage report
 pytest tests/unit/ --cov=app --cov-report=term-missing --cov-report=json:coverage.json
 
-# AI 解析哪些行未覆盖
+# AI: find files below 80% coverage
 cat coverage.json | jq '.files | to_entries[] | select(.value.summary.percent_covered < 80) | {file: .key, coverage: .value.summary.percent_covered}'
 ```

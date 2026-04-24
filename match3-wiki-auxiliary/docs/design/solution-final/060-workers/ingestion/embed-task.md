@@ -24,7 +24,7 @@
 |---|------|------|
 | 1 | 查询 chunks | `chunk_repo.find_by_raw_file_id(raw_file_id)`；无 chunk 则直接推进 DONE |
 | 2 | 分批处理 | `BATCH = 32`，循环直至全部处理完 |
-| 3 | 生成向量 | `rt.embedder.embed_both(texts)` → `(dense_vecs, sparse_vecs)` |
+| 3 | 生成向量 | `embedder.embed_both(texts)` → `(dense_vecs, sparse_vecs)`；`embedder` 在任务内部实例化 |
 | 4 | Milvus upsert | `milvus_store.upsert_chunks(rows)`，以 chunk_id 为主键幂等覆盖写 |
 | 5 | ES index | `es_store.index_chunks(rows)`，以 chunk_id 为 `_id` 幂等覆盖写 |
 | 6 | 状态推进 `DONE` | 全部批次写完后更新 `t_raw_files.f_status` |
@@ -34,13 +34,13 @@
 ## 状态机流转
 
 ```
-PROCESSING  (由 ingest_task 写入)
-  │  embed_chunks 开始执行
-  │  全部批次写入成功
+PROCESSING  (written by ingest_task)
+  │  embed_chunks starts
+  │  all batches written successfully
   ▼
-DONE  ──→  graph_task 继续
+DONE  ──→  graph_task continues
   │
-  │  任何异常（含超过 max_retries）
+  │  any exception (including max_retries exceeded)
   ▼
 FAILED
 ```
@@ -81,18 +81,21 @@ def embed_chunks(self, raw_file_id: str) -> str:
         raw_file.status = DONE; raw_file_repo.update(raw_file); return raw_file_id
 
     try:
+        from app.intelligence.embedder import OpenAIEmbedder
+        embedder = OpenAIEmbedder(api_key=rt.env.OPENAI_API_KEY, model=rt.config.embed.model)
+
         BATCH = 32
         for i in range(0, len(chunks), BATCH):
             batch = chunks[i : i + BATCH]
-            dense_vecs, sparse_vecs = rt.embedder.embed_both([c.content for c in batch])
+            dense_vecs, sparse_vecs = embedder.embed_both([c.content for c in batch])
 
             rows = [{"id": c.id, "workspace_id": c.workspace_id, "raw_file_id": c.raw_file_id,
                      "chunk_type": c.chunk_type, "topic_tags": ",".join(c.topic_tags),
                      "dense_vector": dense, "sparse_vector": sparse, "content": c.content}
                     for c, dense, sparse in zip(batch, dense_vecs, sparse_vecs)]
 
-            milvus.upsert_chunks(rows)
-            es.index_chunks(rows)
+            rt.vector_db.upsert_chunks(rows)
+            rt.search.index_chunks(rows)
 
         raw_file.status = DONE
         raw_file_repo.update(raw_file)

@@ -36,16 +36,16 @@ async def upload_file(
     current_user: User,
     rt: Match3Runtime,
 ) -> ApiResp[UploadResponse]:
-    """处理文件上传：保存至 MinIO，创建 RawFile 记录，入队任务。"""
+    """Handle file upload: save to MinIO, create RawFile record, enqueue task."""
 
-    # 校验文件大小
-    if file.size and file.size > 500 * 1024 * 1024:  # 500 MB 限制
+    # validate file size
+    if file.size and file.size > 500 * 1024 * 1024:  # 500 MB limit
         raise Match3Exception.of_code(
             codes.FILE_TOO_LARGE,
             "invalid file size exceeds 500MB"
         ).ctx(filename=file.filename, size_mb=file.size // (1024 * 1024))
 
-    # 校验文件类型
+    # validate file type
     ext = Path(file.filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
         raise Match3Exception.of_code(
@@ -53,7 +53,7 @@ async def upload_file(
             "invalid file extension not supported"
         ).ctx(filename=file.filename, ext=ext)
 
-    # 上传至 MinIO
+    # upload to MinIO
     object_key = f"{workspace_id}/{uuid4()}{ext}"
     file_bytes = await file.read()
     try:
@@ -61,7 +61,7 @@ async def upload_file(
     except Exception as e:
         raise Match3Exception.of("failed to put_object").ctx(object_key=object_key).as_ex(e)
 
-    # 创建 RawFile 记录
+    # create RawFile record
     raw_file = RawFile(
         id=str(uuid4()),
         workspace_id=workspace_id,
@@ -73,10 +73,10 @@ async def upload_file(
         status=RawFileStatus.PENDING,
         created_by=current_user.id,
     )
-    raw_file_repo = RawFileRepository(rt.db_engine)
+    raw_file_repo = RawFileRepository(rt.db)
     inserted = raw_file_repo.insert(raw_file)
 
-    # 入队异步任务
+    # enqueue async task
     task = ingest_task.apply_async(
         args=[inserted.id],
         queue=constants.QUEUE_INGEST,
@@ -103,22 +103,22 @@ from app.common.constants import constants, codes
     name="match3.ingest",
 )
 def ingest_task(self: Task, raw_file_id: str) -> None:
-    """从 MinIO 下载文件，解析，分块，入队 embed + graph 任务。
+    """Download file from MinIO, parse, chunk, enqueue embed + graph tasks.
 
-    对于 ≥20 页的 PDF，_parse_pdf 会在分块的同时额外向 PageIndex 提交建树（additive，不替代分块）。
+    For PDFs >= 20 pages, _parse_pdf submits an additive PageIndex tree alongside chunking.
     """
     rt = get_worker_runtime()
-    raw_file_repo = RawFileRepository(rt.db_engine)
+    raw_file_repo = RawFileRepository(rt.db)
 
     raw_file = raw_file_repo.find_by_id(raw_file_id)
     if raw_file is None:
         rt.logger.error(f"raw_file not found: raw_file_id={raw_file_id}")
         return
 
-    # 标记为处理中
+    # mark as processing
     raw_file_repo.update_status(raw_file_id, RawFileStatus.PROCESSING)
 
-    # 从 MinIO 下载
+    # download from MinIO
     try:
         obj = rt.storage.get_object(raw_file.object_key)
     except Exception as e:
@@ -130,27 +130,27 @@ def ingest_task(self: Task, raw_file_id: str) -> None:
     file_bytes = obj.read()
     ext = Path(raw_file.filename).suffix.lower()
 
-    # 分发至对应解析器
+    # dispatch to the matching parser
     try:
         chunks = _parse_file(rt, raw_file, file_bytes, ext)
     except Match3Exception as e:
         raw_file_repo.update_status(raw_file_id, RawFileStatus.FAILED, error=str(e))
         raise
 
-    # 保存 chunk 至 PostgreSQL
-    chunk_repo = ChunkRepository(rt.db_engine)
+    # persist chunks to PostgreSQL
+    chunk_repo = ChunkRepository(rt.db)
     chunk_ids = []
     for chunk in chunks:
         inserted_chunk = chunk_repo.insert(chunk)
         chunk_ids.append(inserted_chunk.id)
 
-    # 始终入队嵌入任务（文本块 → Milvus + Elasticsearch）
+    # enqueue embed task (text chunks → Milvus + Elasticsearch)
     embed_task.apply_async(args=[chunk_ids], queue=constants.QUEUE_EMBED)
 
-    # 始终入队图谱抽取任务（实体关系 → Neo4j）
+    # enqueue graph extraction task (entities/relationships → Neo4j)
     graph_task.apply_async(args=[raw_file_id], queue=constants.QUEUE_GRAPH)
 
-    # 标记为已完成
+    # mark as done
     raw_file_repo.update_status(raw_file_id, RawFileStatus.DONE)
 
 
@@ -160,7 +160,7 @@ def _parse_file(
     file_bytes: bytes,
     ext: str,
 ) -> list[Chunk]:
-    """将文件路由至对应解析器。返回 Chunk 对象列表。"""
+    """Route file to the appropriate parser. Returns a list of Chunk objects."""
 
     if ext == ".pdf":
         return _parse_pdf(rt, raw_file, file_bytes)
@@ -191,26 +191,27 @@ def _parse_file(
 
 ```python
 def _parse_pdf(rt: Match3Runtime, raw_file: RawFile, file_bytes: bytes) -> list[Chunk]:
-    """解析 PDF：所有 PDF 均走 markitdown 分块；≥20 页的 PDF 额外提交 PageIndex 建树。"""
+    """Parse PDF: all PDFs go through markitdown chunking; PDFs >= 20 pages also submit PageIndex tree."""
 
-    # 写入临时文件（markitdown 和 PageIndex 均需要文件路径）
+    # write to temp file (markitdown and PageIndex both require a file path)
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(file_bytes)
         tmp_path = tmp.name
 
     try:
-        # 统计页数
+        # count pages
         import pypdf
         reader = pypdf.PdfReader(tmp_path)
         page_count = len(reader.pages)
         raw_file.page_count = page_count
 
-        # 所有 PDF 均走 markitdown 正常分块，写入 Milvus / ES / Neo4j
+        # all PDFs go through markitdown chunking, written to Milvus / ES / Neo4j
         chunks = _parse_pdf_markitdown(rt, raw_file, tmp_path)
 
-        # ≥20 页的 PDF 额外提交 PageIndex 建树，存储 doc_id 供 doc-navigate 检索路径使用
+        # PDFs with >= 20 pages also submit to PageIndex for tree-building; stored for doc-navigate retrieval
         if page_count >= 20:
-            _register_pageindex(rt, raw_file, tmp_path, page_count)
+            pageindex_client = PageIndexClient(api_key=rt.env.PAGEINDEX_API_KEY)
+            _register_pageindex(pageindex_client, raw_file, tmp_path, page_count)
 
         return chunks
     finally:
@@ -218,19 +219,17 @@ def _parse_pdf(rt: Match3Runtime, raw_file: RawFile, file_bytes: bytes) -> list[
 
 
 def _register_pageindex(
-    rt: Match3Runtime,
+    pageindex_client: PageIndexClient,
     raw_file: RawFile,
     pdf_path: str,
     page_count: int,
 ) -> None:
-    """将 PDF 上传至 PageIndex，将 doc_id 和目录树写入 raw_file 元数据。
+    """Upload PDF to PageIndex; write doc_id and tree into raw_file metadata.
 
-    此调用独立于分块流水线之外，不影响分块结果。
+    This call is independent of the chunking pipeline and does not affect chunk output.
     """
-    client = rt.pageindex
-
     try:
-        doc_id = client.add(pdf_path)
+        doc_id = pageindex_client.add(pdf_path)
     except Exception as e:
         raise Match3Exception.of("failed to pageindex_client.add").ctx(
             raw_file_id=raw_file.id,
@@ -238,15 +237,14 @@ def _register_pageindex(
         ).as_ex(e)
 
     try:
-        tree = client.get_tree(doc_id)
+        tree = pageindex_client.get_tree(doc_id)
     except Exception as e:
         raise Match3Exception.of("failed to pageindex_client.get_tree").ctx(
             doc_id=doc_id,
         ).as_ex(e)
 
-    # 将 doc_id 和目录树写入 raw_file 元数据（RawFileRepository 在 ingest_task 中负责持久化）
-    raw_file.pageindex_doc_id = doc_id
-    raw_file.pageindex_tree = tree
+    # write doc_id and tree into raw_file metadata (RawFileRepository in ingest_task handles persistence)
+    raw_file.pageindex_doc_id = doc_id    raw_file.pageindex_tree = tree
 
 
 def _parse_pdf_markitdown(
@@ -254,7 +252,7 @@ def _parse_pdf_markitdown(
     raw_file: RawFile,
     pdf_path: str,
 ) -> list[Chunk]:
-    """用 markitdown 解析短 PDF，再进行语义分块。"""
+    """Parse PDF with markitdown then apply semantic chunking."""
     from markitdown import MarkItDown
 
     md = MarkItDown()
@@ -279,7 +277,7 @@ def _parse_pdf_markitdown(
 
 from sentence_transformers import SentenceTransformer
 
-_sent_model = SentenceTransformer("all-MiniLM-L6-v2")  # 快速，仅用于分块
+_sent_model = SentenceTransformer("all-MiniLM-L6-v2")  # fast local model, only used for chunking
 
 def semantic_chunk(
     raw_file: RawFile,
@@ -288,32 +286,32 @@ def semantic_chunk(
     similarity_threshold: float = 0.5,
     overlap_sentences: int = 1,
 ) -> list[Chunk]:
-    """基于嵌入相似度下降将文本切割为语义 chunk。
+    """Split text into semantic chunks based on embedding similarity drops.
 
-    算法：
-    1. 将文本切分为句子（spacy 或正则）
-    2. 用快速本地模型对每个句子做嵌入
-    3. 计算相邻句子间的余弦相似度
-    4. 相似度低于阈值时开启新 chunk
-    5. 合并小 chunk 直到达到 max_chunk_size
-    6. 在每个新 chunk 开头添加前一 chunk 的 overlap_sentences 句
+    Algorithm:
+    1. Split text into sentences (regex)
+    2. Embed each sentence with a fast local model
+    3. Compute cosine similarity between adjacent sentences
+    4. Start a new chunk when similarity drops below threshold
+    5. Merge small chunks until max_chunk_size is reached
+    6. Prepend overlap_sentences from the previous chunk at each boundary
     """
     import re
     sentences = re.split(r"(?<=[.!?])\s+", text.strip())
     if not sentences:
         return []
 
-    # 对所有句子做嵌入
+    # embed all sentences
     embeddings = _sent_model.encode(sentences, show_progress_bar=False)
 
-    # 计算相邻句子间的相似度
+    # compute similarity between adjacent sentences
     from numpy import dot
     from numpy.linalg import norm
 
     def cosine(a, b):
         return dot(a, b) / (norm(a) * norm(b) + 1e-10)
 
-    # 将句子分组为 chunk
+    # group sentences into chunks
     chunks_text = []
     current_group = [sentences[0]]
 
@@ -321,7 +319,7 @@ def semantic_chunk(
         sim = cosine(embeddings[i - 1], embeddings[i])
         if sim < similarity_threshold or _approx_tokens(current_group) >= max_chunk_size:
             chunks_text.append(" ".join(current_group))
-            # 添加 overlap
+            # add overlap
             current_group = sentences[max(0, i - overlap_sentences):i] + [sentences[i]]
         else:
             current_group.append(sentences[i])
@@ -344,7 +342,7 @@ def semantic_chunk(
 
 
 def _approx_tokens(sentences: list[str]) -> int:
-    """粗略 token 数：1 token ≈ 4 字符。"""
+    """Rough token count: 1 token ≈ 4 chars."""
     return sum(len(s) for s in sentences) // 4
 ```
 
@@ -364,9 +362,9 @@ from app.common.constants import constants
     name="match3.embed",
 )
 def embed_task(self: Task, chunk_ids: list[str]) -> None:
-    """对 chunk 进行嵌入并插入 Milvus + Elasticsearch。"""
+    """Embed chunks and insert into Milvus + Elasticsearch."""
     rt = get_worker_runtime()
-    chunk_repo = ChunkRepository(rt.db_engine)
+    chunk_repo = ChunkRepository(rt.db)
 
     chunks = chunk_repo.find_by_ids(chunk_ids)
     if not chunks:
@@ -382,23 +380,26 @@ def embed_task(self: Task, chunk_ids: list[str]) -> None:
 
 
 def _embed_text_chunks(rt: Match3Runtime, chunks: list[Chunk]) -> None:
-    """批量嵌入文本 chunk → Milvus + Elasticsearch。"""
+    """Batch-embed text chunks → Milvus + Elasticsearch."""
     texts = [c.content for c in chunks]
 
-    # 批量嵌入（每次最多 2048 条，通过 rt.embedder）
+    # batch embed via intelligence-layer embedder (not on Match3Runtime)
+    from app.intelligence.embedder import OpenAIEmbedder
+    embedder = OpenAIEmbedder(api_key=rt.env.OPENAI_API_KEY, model=rt.config.embed.model)
+
     BATCH_SIZE = 256
     all_embeddings = []
     for i in range(0, len(texts), BATCH_SIZE):
         batch = texts[i:i + BATCH_SIZE]
         try:
-            dense_vecs, _ = rt.embedder.embed_both(batch)
+            dense_vecs, _ = embedder.embed_both(batch)
         except Exception as e:
             raise Match3Exception.of("failed to embedder.embed_both").ctx(
                 batch_size=len(batch),
             ).as_ex(e)
         all_embeddings.extend(dense_vecs)
 
-    # 插入 Milvus
+    # insert into Milvus
     milvus_data = [
         {
             "chunk_id": c.id,
@@ -412,13 +413,13 @@ def _embed_text_chunks(rt: Match3Runtime, chunks: list[Chunk]) -> None:
         for c, emb in zip(chunks, all_embeddings)
     ]
     try:
-        rt.milvus.insert(collection_name=constants.MILVUS_COLLECTION, data=milvus_data)
+        rt.vector_db.insert(collection_name=constants.MILVUS_COLLECTION, data=milvus_data)
     except Exception as e:
-        raise Match3Exception.of("failed to milvus.insert text_chunks").ctx(
+        raise Match3Exception.of("failed to vector_db.insert text_chunks").ctx(
             count=len(milvus_data),
         ).as_ex(e)
 
-    # 在 Elasticsearch 中建立索引
+    # index into Elasticsearch
     es_ops = []
     for c in chunks:
         es_ops.append({"index": {"_index": constants.ES_INDEX_CHUNKS, "_id": c.id}})
@@ -430,9 +431,9 @@ def _embed_text_chunks(rt: Match3Runtime, chunks: list[Chunk]) -> None:
             "tags": c.tags or [],
         })
     try:
-        rt.es.bulk(operations=es_ops)
+        rt.search.bulk(operations=es_ops)
     except Exception as e:
-        raise Match3Exception.of("failed to es.bulk index text_chunks").ctx(
+        raise Match3Exception.of("failed to search.bulk index text_chunks").ctx(
             count=len(chunks),
         ).as_ex(e)
 ```
@@ -472,9 +473,9 @@ Text:
     name="match3.graph",
 )
 def graph_task(self: Task, raw_file_id: str) -> None:
-    """从原始文件中提取实体并插入 Neo4j。"""
+    """Extract entities from raw file chunks and insert into Neo4j."""
     rt = get_worker_runtime()
-    chunk_repo = ChunkRepository(rt.db_engine)
+    chunk_repo = ChunkRepository(rt.db)
 
     chunks = chunk_repo.find_by_raw_file_id(raw_file_id)
     full_text = " ".join(c.content for c in chunks if c.chunk_type == ChunkType.TEXT)
@@ -482,14 +483,16 @@ def graph_task(self: Task, raw_file_id: str) -> None:
     if not full_text.strip():
         return
 
-    # 用 LLM 提取实体
+    # extract entities via intelligence-layer LLM (not on Match3Runtime)
+    from app.intelligence.llm import OpenAILLMCaller
+    llm = OpenAILLMCaller(api_key=rt.env.OPENAI_API_KEY, model=rt.config.llm.default_model)
+
     try:
-        content = rt.llm.complete(
+        content = llm.complete(
             messages=[{
                 "role": "user",
                 "content": ENTITY_EXTRACTION_PROMPT.format(text=full_text[:8000]),
             }],
-            model=rt.config.llm.default_model,
             temperature=0,
             response_format={"type": "json_object"},
         )
@@ -507,13 +510,13 @@ def graph_task(self: Task, raw_file_id: str) -> None:
             raw_file_id=raw_file_id,
         ).as_ex(e)
 
-    # 插入 Neo4j
+    # insert into Neo4j
     _insert_graph(rt, data, raw_file_id)
 
 
 def _insert_graph(rt: Match3Runtime, data: dict, raw_file_id: str) -> None:
-    """将提取的实体和关系插入 Neo4j。"""
-    with rt.neo4j.session() as session:
+    """Insert extracted entities and relationships into Neo4j."""
+    with rt.graph_db.session() as session:
         for entity in data.get("entities", []):
             try:
                 session.run(

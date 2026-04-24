@@ -11,23 +11,23 @@
 每个 try 块**只包裹单一调用**，捕获后立即用 `Match3Exception` 封装并附加上下文：
 
 ```python
-# 正确 — 每个 try 块只包裹一次调用，附加明确上下文
+# correct — each try wraps a single call with explicit context
 try:
     result = some_external_client.call(arg)
 except Exception as e:
     raise Match3Exception.of("failed to <func>").ctx(key=val).as_ex(e)
 
-# 正确 — 业务规则违反使用 of_code
+# correct — business rule violation uses of_code
 if not workspace:
     raise Match3Exception.of_code(codes.WORKSPACE_NOT_FOUND, "workspace not found") \
         .ctx(workspace_id=workspace_id)
 
-# 错误 — 宽泛的 try 块会隐藏哪个调用失败
+# wrong — broad try block hides which call failed
 try:
     a = repo_a.find(id)
     b = repo_b.find(id)
 except Exception as e:
-    raise Match3Exception.of("something failed").as_ex(e)  # 来源不明
+    raise Match3Exception.of("something failed").as_ex(e)  # origin unclear
 ```
 
 `resolve_code()` 沿 `__cause__` 链向下查找，返回**第一个非零 code**，供 API 层用于响应和前端 i18n 查表。
@@ -53,15 +53,15 @@ SSE 端点使用 `StreamingResponse`，不经过 `ApiResp` 包装。分页列表
 ```python
 from app.common.constants import codes
 
-# 正确 — 集合成员判断；新增第二个成功码只需修改 codes.py，调用方无需改动
+# correct — set membership; adding a second success code only requires changing codes.py
 if result_code in codes.SUCCESS_CODES:
     ...
 raise Match3Exception.of_code(codes.WORKSPACE_NOT_FOUND, "workspace not found")
 
-# 错误 — 单值常量比较；若将来新增第二个成功码则会失效
+# wrong — single-value constant; breaks if a second success code is added later
 if result_code == codes.SUCCESS: ...
 
-# 错误 — 内联数字字面量，禁止使用
+# wrong — inline numeric literal, forbidden
 if result_code == 100000: ...
 ```
 
@@ -72,19 +72,19 @@ if result_code == 100000: ...
 ```python
 # app/common/constants/constants.py
 
-# Celery 队列名
+# Celery queue names
 QUEUE_INGEST  = "ingest"
 QUEUE_EMBED   = "embed"
 QUEUE_GRAPH   = "graph"
 QUEUE_COMPILE = "compile"
 QUEUE_RAG     = "rag"
 
-# 块类型
+# chunk types
 CHUNK_TYPE_TEXT           = "text"
 CHUNK_TYPE_IMAGE          = "image"
 CHUNK_TYPE_TABLE          = "table"
 
-# 文件类型
+# file types
 FILE_TYPE_PDF      = "pdf"
 FILE_TYPE_IMAGE    = "image"
 FILE_TYPE_VIDEO    = "video"
@@ -93,17 +93,17 @@ FILE_TYPE_HTML     = "html"
 FILE_TYPE_CSV      = "csv"
 FILE_TYPE_MARKDOWN = "markdown"
 
-# MinIO 存储桶
+# MinIO bucket
 MINIO_BUCKET_RAW = "raw-files"
 
-# Milvus 集合与维度
-MILVUS_COLLECTION        = "match3_chunks"    # 文本块集合
-MILVUS_COLLECTION_IMAGES = "image_chunks"     # CLIP 图像块集合
-MILVUS_DENSE_DIM         = 1536               # text-embedding-3-small 输出维度
-MILVUS_SPARSE_DIM        = 250002             # BGE-M3 稀疏词表大小
-MILVUS_IMAGE_DIM         = 768                # CLIP ViT-L/14 输出维度
+# Milvus collections and dimensions
+MILVUS_COLLECTION        = "match3_chunks"    # text chunk collection
+MILVUS_COLLECTION_IMAGES = "image_chunks"     # CLIP image chunk collection
+MILVUS_DENSE_DIM         = 1536               # text-embedding-3-small output dim
+MILVUS_SPARSE_DIM        = 250002             # BGE-M3 sparse vocab size
+MILVUS_IMAGE_DIM         = 768                # CLIP ViT-L/14 output dim
 
-# Elasticsearch 索引
+# Elasticsearch indexes
 ES_INDEX_CHUNKS = "text_chunks"
 ES_INDEX_WIKI   = "wiki_pages"
 ```
@@ -123,12 +123,12 @@ ES_INDEX_WIKI   = "wiki_pages"
 
 ### 7. Runtime 只持有 Protocol 接口
 
-`rt.llm`、`rt.embedder`、`rt.image_embedder`、`rt.transcriber`、`rt.reranker`、`rt.storage`、`rt.pageindex` 均以 **Protocol 接口**存储，从不持有具体实现类：
+`rt.db`、`rt.vector_db`、`rt.search`、`rt.graph_db`、`rt.cache`、`rt.queue`、`rt.storage` 均以 **Protocol 接口**存储，从不持有具体实现类。LLM、Embedder、Reranker、PageIndex 等智能层组件**不挂载在 Runtime 上**，而是在任务或服务内部按需本地实例化（通过 `rt.env.OPENAI_API_KEY`、`rt.config.*` 获取凭证和配置）：
 
-- 测试时直接用 `MagicMock()` 替换，无需 `@patch` 任何全局符号
+- 测试时直接用 `MagicMock()` 替换 Runtime 字段，无需 `@patch` 任何全局符号
 - 换实现（如 OpenAI → Anthropic）只需修改 `build_runtime()`，业务代码零改动
 
-**禁止**在业务代码中直接实例化 `OpenAI()`、`MilvusClient(...)` 等具体客户端；必须通过 `rt.xxx` 协议接口访问。
+**禁止**在业务代码中直接实例化 `MilvusClient(...)`、`Elasticsearch(...)` 等具体基础设施客户端；必须通过 `rt.xxx` 协议接口访问。智能层（`OpenAILLMCaller`、`OpenAIEmbedder` 等）在本地实例化后即用即弃，不缓存到全局变量。
 
 ### 8. Repository 双模式
 
@@ -140,7 +140,7 @@ ES_INDEX_WIKI   = "wiki_pages"
 
 ### 10. RAG 路径选择
 
-`AdaptiveRAGRouter` 在运行时对查询分类，选择合适路径（`hybrid-search` / `wiki-lookup` / `doc-navigate`）。所有路由决策通过 `rt.llm` 协议接口完成，不直接调用具体 LLM 客户端。
+`AdaptiveRAGRouter` 在运行时对查询分类，选择合适路径（`hybrid-search` / `wiki-lookup` / `doc-navigate`）。路由决策通过本地实例化的 LLM 调用完成，所有 LLM 凭证来自 `rt.env`，模型名称来自 `rt.config`。
 
 ---
 
@@ -157,13 +157,13 @@ ES_INDEX_WIKI   = "wiki_pages"
 ```typescript
 import { SUCCESS_CODES } from "@/lib/constants";
 
-// 正确 — 集合查找；将来新增第二个成功码只需修改 constants.ts
+// correct — set lookup; adding a second success code only requires changing constants.ts
 if (SUCCESS_CODES.has(resp.code)) { ... }
 
-// 错误 — 内联字面量
+// wrong — inline literal
 if (resp.code === 100000) { ... }
 
-// 错误 — 单值常量；若将来新增第二个成功码则会失效
+// wrong — single-value constant; breaks if a second success code is added later
 if (resp.code === SUCCESS_CODE) { ... }
 ```
 
@@ -174,26 +174,26 @@ if (resp.code === SUCCESS_CODE) { ... }
 ```typescript
 // lib/constants.ts
 
-// 成功码集合 — 使用 SUCCESS_CODES.has(code)，禁止 === 100000
+// success code set — use SUCCESS_CODES.has(code), never === 100000
 export const SUCCESS_CODES = new Set([100000]);
 
-// i18n 查不到对应 key 时的降级错误码
+// fallback error code when i18n key is not found
 export const FALLBACK_ERROR_CODE = 500000;
 
-// localStorage / cookie 键名
+// localStorage / cookie keys
 export const ACCESS_TOKEN_KEY = "access_token";
 
-// SSE 字段名与结束哨兵
+// SSE field names and done sentinel
 export const SSE_FIELD_TOKEN   = "token";
 export const SSE_FIELD_ERROR   = "error";
 export const SSE_DONE_SENTINEL = "[DONE]";
 
-// API 路径 — 组件或 hook 中禁止内联路径字符串
+// API paths — components and hooks must not inline path strings
 export const API_QA_ASK        = "/api/v1/qa/ask";
 export const API_QA_SESSIONS   = "/api/v1/qa/sessions";
 export const API_INGEST_UPLOAD = "/api/v1/ingest/upload";
 export const API_WIKI_PAGES    = "/api/v1/wiki/pages";
-// 新增端点时在此追加
+// add new endpoints here
 ```
 
 ### 14. 错误处理自动化
@@ -229,7 +229,7 @@ export const API_WIKI_PAGES    = "/api/v1/wiki/pages";
 | 4 | 其他魔法字符串只在 `constants.py` 定义，禁止内联字符串 | ✓ | |
 | 5 | 配置与凭证严格分层（`config.yaml` vs `.env`）| ✓ | |
 | 6 | 禁止全局单例，所有依赖通过 Runtime 注入 | ✓ | |
-| 7 | Runtime 字段全部是 Protocol 接口，不持有具体实现 | ✓ | |
+| 7 | Runtime 字段全部是 Protocol 接口；智能层（LLM/Embedder 等）在本地实例化，不挂载在 Runtime 上 | ✓ | |
 | 8 | Repository 双模式：`insert` 自动提交，`tx_insert` 显式事务 | ✓ | |
 | 9 | 导入/嵌入始终异步，API 立即返回任务 ID | ✓ | |
 | 10 | AdaptiveRAGRouter 在运行时选择检索路径（hybrid-search / wiki-lookup / doc-navigate） | ✓ | |

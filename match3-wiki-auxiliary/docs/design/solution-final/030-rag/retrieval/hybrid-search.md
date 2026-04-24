@@ -3,7 +3,7 @@
 ## 查询流程概览
 
 ```
-原始 query → 查询扩展 → 多通道并行检索 → RRF 融合 → 精排 → 验证 → 生成
+raw query → query expansion → parallel multi-channel retrieval → RRF fusion → reranking → validation → generation
 ```
 
 五个阶段均独立可配置，通过 `RetrievalConfig` 声明式组合。
@@ -15,38 +15,38 @@
 ## 1. 五阶段流水线
 
 ```
-原始 query
+raw query
     │
     ▼
-[阶段 1] 查询扩展（两个独立开关，可同时开启）
-    multi_query: LLM 将 query 改写成 N 种不同表述，分别检索后合并
-    hyde:        LLM 先生成假答案，用假答案向量检索；与 multi_query 可叠加
-    （两者都关闭则直接用原始 query）
+[Stage 1] Query expansion (two independent switches, can both be enabled)
+    multi_query: LLM rewrites query into N variants, each retrieved separately then merged
+    hyde:        LLM generates a hypothetical answer first, use its vector for retrieval; stackable with multi_query
+    (both off → use raw query directly)
     │
     ▼
-[阶段 2] 多通道并行检索（选开哪些通道）
-    ├── Dense  → Milvus ANN（语义向量）
-    ├── Sparse → Milvus BM42/SPLADE（稀疏向量）
-    ├── BM25   → Elasticsearch（精确关键词）
-    ├── Graph  → Neo4j 实体关系多跳遍历
-    └── SQL    → PostgreSQL 结构化聚合查询
+[Stage 2] Parallel multi-channel retrieval (choose which channels to enable)
+    ├── Dense  → Milvus ANN (semantic vector)
+    ├── Sparse → Milvus BM42/SPLADE (sparse vector)
+    ├── BM25   → Elasticsearch (exact keyword)
+    ├── Graph  → Neo4j entity-relation multi-hop traversal
+    └── SQL    → PostgreSQL structured aggregate query
     │
     ▼
-[阶段 3] 融合（多通道结果合并）
-    RRF: Reciprocal Rank Fusion 倒数排序融合
+[Stage 3] Fusion (merge multi-channel results)
+    RRF: Reciprocal Rank Fusion
     │
     ▼
-[阶段 4] 精排（可选，成本递增）
-    none:          不精排，直接截取 top-K
-    lightweight:   轻量 reranker 初筛（BGE-reranker-base）
-    cross_encoder: Cross-Encoder 精排（BGE-reranker-large）
-    llm_judge:     LLM 逐条打分（高成本，高精度）
+[Stage 4] Reranking (optional, increasing cost)
+    none:          no rerank, directly truncate top-K
+    lightweight:   lightweight reranker initial filter (BGE-reranker-base)
+    cross_encoder: Cross-Encoder precise rerank (BGE-reranker-large)
+    llm_judge:     LLM per-item scoring (high cost, high precision)
     │
     ▼
-[阶段 5] 验证（可选，高准确率场景）
-    none:     不验证，直接生成
-    crag:     LLM 判断相关性；不足时触发 web 搜索兜底
-    self_rag: 生成初稿后 LLM 自检是否有文档依据；不足则重生成
+[Stage 5] Validation (optional, high-accuracy scenarios)
+    none:     no validation, generate directly
+    crag:     LLM relevance check; trigger web search fallback if insufficient
+    self_rag: generate draft then LLM self-check for document grounding; regenerate if insufficient
 ```
 
 ---
@@ -184,14 +184,14 @@ class RetrievalConfig:
 Milvus 以 `workspace_id` 作为分区键（`partition_key_field`），ANN 搜索天然只在当前工作区的向量空间内比对，无需遍历其他工作区的向量。
 
 ```
-全量向量空间（数百万条）
+Full vector space (millions of entries)
   │ partition_key = workspace_id
   ▼
-当前工作区向量分区（通常数万～数十万条）
+Current workspace vector partition (typically tens of thousands to hundreds of thousands)
   │ scalar pre-filter: file_type / topic_tag / date_range
   ▼
-过滤后候选集（通常数千条）
-  │ ANN search (HNSW / IVF_SQ8)，ef=64
+Filtered candidate set (typically thousands)
+  │ ANN search (HNSW / IVF_SQ8), ef=64
   ▼
 top-50 candidates
 ```
@@ -207,14 +207,14 @@ ES 的倒排索引本身已经是"只比对含目标词的文档"，`filter` 子
 纯图谱遍历从所有节点出发复杂度爆炸。正确策略：
 
 ```
-1. 先用 Dense/Sparse 搜到 top-K anchor chunks（已缩小范围）
-2. 从 anchor chunks 中提取实体 entity_ids
-3. 仅从这些 entity_ids 出发做 N 跳遍历：
+1. Use Dense/Sparse to find top-K anchor chunks first (already narrowed scope)
+2. Extract entity_ids from anchor chunks
+3. Traverse N hops starting only from these entity_ids:
 
    MATCH (e)-[*1..2]-(n) WHERE e.id IN $anchor_ids
-   // Neo4j 对 (workspace_id, entity_id) 建复合索引
+   // Neo4j builds a composite index on (workspace_id, entity_id)
 
-4. 遍历结果的子图再二次 embedding 匹配
+4. Re-embed-match the subgraph from traversal results
 ```
 
 `graph_hops` 默认 2，3 跳以上性能急剧下降，通常无必要。
@@ -321,19 +321,19 @@ PROFILE_MAP: dict[str, RetrievalConfig] = {
 ## 7. 精排层次
 
 ```
-候选集（fusion_top_k = 150）
+Candidate set (fusion_top_k = 150)
     │
     │ rerank = lightweight
     ▼
-BGE-reranker-base 初筛 → top-20
+BGE-reranker-base initial filter → top-20
     │
     │ rerank = cross_encoder
     ▼
-BGE-reranker-large 精排 → top-5
+BGE-reranker-large precise rerank → top-5
     │
-    │ rerank = llm_judge（高成本，慎用）
+    │ rerank = llm_judge (high cost, use sparingly)
     ▼
-LLM 逐条 (query, doc) 打相关分 → top-3
+LLM per-item (query, doc) relevance scoring → top-3
 ```
 
 生产建议：默认使用 `lightweight`，复杂查询升级到 `cross_encoder`，不建议常规场景使用 `llm_judge`。
@@ -345,13 +345,13 @@ LLM 逐条 (query, doc) 打相关分 → top-3
 ### 8.1 CRAG
 
 ```
-精排结果
+Reranked results
     │
     ▼
-LLM 判断：这些文档与查询是否相关？
-    ├─ 相关 → 正常生成
-    ├─ 部分相关 → 合并 web 搜索结果后生成
-    └─ 不相关 → LLM 改写 query → web 搜索兜底 → 生成
+LLM judgment: are these documents relevant to the query?
+    ├─ relevant     → generate normally
+    ├─ partially    → merge web search results then generate
+    └─ not relevant → LLM rewrites query → web search fallback → generate
 ```
 
 **启用条件**：`validation=CRAG, web_fallback=True`，适合时效性强或内部知识库覆盖不全的场景。
@@ -359,12 +359,12 @@ LLM 判断：这些文档与查询是否相关？
 ### 8.2 Self-RAG
 
 ```
-精排结果 → LLM 生成初稿
+Reranked results → LLM generates draft
     │
     ▼
-LLM 自检：答案中每个论断是否都有文档支撑？
-    ├─ 通过 → 输出初稿
-    └─ 不通过 → 附加"请严格基于参考资料"指令重新生成
+LLM self-check: does every claim in the answer have document support?
+    ├─ pass    → output draft
+    └─ fail    → regenerate with added instruction "strictly based on references"
 ```
 
 **启用条件**：`validation=SELF_RAG`，适合准确率要求极高、不能容忍幻觉的场景（如法规、合规类查询）。
@@ -384,15 +384,15 @@ LLM 自检：答案中每个论断是否都有文档支撑？
 把检索到的文档拆成多个子集，多个小模型**并行**生成候选草稿，最后由大模型一次验证选最优，整体耗时 ≈ 单个小模型生成时间。
 
 ```
-检索候选集（k=15）
-    │ 拆成 N 个子集
+Retrieved candidate set (k=15)
+    │ split into N subsets
     ▼
 [subset_1] [subset_2] [subset_3] [subset_4] [subset_5]
     │           │           │           │           │
- small_LM   small_LM   small_LM   small_LM   small_LM（并行）
+ small_LM   small_LM   small_LM   small_LM   small_LM (parallel)
     └───────────────────────┬───────────────────────┘
                             ▼
-                      large_LM 验证并选最优草稿
+                      large_LM validates and selects best draft
                             │
                             ▼
                        final_answer

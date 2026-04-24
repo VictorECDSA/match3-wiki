@@ -40,13 +40,13 @@
 ## 状态机流转
 
 ```
-PROCESSING  (由 embed_task 写入)
-  │  extract_graph 开始执行
-  │  所有 chunk 图谱写入成功
+PROCESSING  (written by embed_task)
+  │  extract_graph starts
+  │  all chunk graph writes succeed
   ▼
-DONE  ← 文件完全可用
+DONE  ← file fully available
   │
-  │  任何异常（含超过 max_retries）
+  │  any exception (including max_retries exceeded)
   ▼
 FAILED
 ```
@@ -88,8 +88,11 @@ def extract_graph(self, raw_file_id: str) -> str:
                    if c.chunk_type == CHUNK_TYPE_TEXT and len(c.content) >= 50]
 
     try:
+        from app.intelligence.llm import OpenAILLMCaller
+        llm = OpenAILLMCaller(api_key=rt.env.OPENAI_API_KEY, model=rt.config.llm.default_model)
+
         for chunk in text_chunks:
-            data = json.loads(rt.llm.complete(
+            data = json.loads(llm.complete(
                 messages=[{"role": "user", "content": EXTRACT_PROMPT.format(text=chunk.content[:3000])}],
                 temperature=0, response_format={"type": "json_object"},
             ))

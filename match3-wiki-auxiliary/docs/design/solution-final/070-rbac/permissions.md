@@ -56,7 +56,7 @@ class Action(str, Enum):
     DELETE_WORKSPACE  = "delete_workspace"
 
 
-# 角色按权限从高到低排列
+# roles ordered from highest to lowest privilege
 _ROLE_RANK = {
     "owner":  4,
     "admin":  3,
@@ -64,7 +64,7 @@ _ROLE_RANK = {
     "viewer": 1,
 }
 
-# 各操作所需的最低角色
+# minimum role rank required per action
 _REQUIRED_RANK: dict[Action, int] = {
     Action.UPLOAD_FILE:      _ROLE_RANK["member"],
     Action.DELETE_OWN_FILE:  _ROLE_RANK["member"],
@@ -82,12 +82,13 @@ _REQUIRED_RANK: dict[Action, int] = {
 
 def require(role: str, action: Action) -> None:
     """
-    若角色权限不足，则抛出带有 PERMISSION_DENIED 错误码的 Match3Exception。
+    Raise Match3Exception with PERMISSION_DENIED code if the role is insufficient.
 
-    用法：
+    Usage:
         require(member.role, Action.UPLOAD_FILE)
 
-    这是一个纯函数，不涉及数据库调用——调用方负责提前加载 WorkspaceMember 记录。
+    Pure function — no database calls. Caller is responsible for loading the
+    WorkspaceMember record beforehand.
     """
     rank = _ROLE_RANK.get(role, 0)
     required = _REQUIRED_RANK[action]
@@ -105,10 +106,10 @@ def require(role: str, action: Action) -> None:
 每个数据库查询都在 WHERE 子句中包含 `workspace_id`。即使用户提供了不匹配的 ID，也绝不会返回跨工作区的数据。
 
 ```python
-# 示例：文件列表查询始终限定在工作区范围内
+# Example: file list query is always scoped to the workspace
 def find_paginated(self, workspace_id: str, ...) -> tuple[list[RawFile], int]:
     base = select(RawFile).where(
-        RawFile.workspace_id == workspace_id,   # 必须始终包含
+        RawFile.workspace_id == workspace_id,   # always required
         RawFile.delete_time.is_(None),
     )
     ...
@@ -134,8 +135,8 @@ def get_member_or_raise(
     workspace_id: str,
 ) -> "WorkspaceMember":
     """
-    加载 (user_id, workspace_id) 对应的 WorkspaceMember。
-    若不存在，则抛出带有 WORKSPACE_NOT_MEMBER 错误码的 Match3Exception。
+    Load the WorkspaceMember for the given (user_id, workspace_id) pair.
+    Raises Match3Exception with WORKSPACE_NOT_MEMBER code if not found.
     """
     from app.storage.entities.workspace_member import WorkspaceMember as WM
     repo = WorkspaceMemberRepository(engine)
@@ -152,7 +153,7 @@ def get_member_or_raise(
 
 ```python
 def upload_file(self, workspace_id: str, user_id: str, ...) -> RawFileResp:
-    member = get_member_or_raise(self._rt.db_engine, user_id, workspace_id)
+    member = get_member_or_raise(self._rt.db, user_id, workspace_id)
     require(member.role, Action.UPLOAD_FILE)
     ...
 ```
@@ -164,11 +165,11 @@ def upload_file(self, workspace_id: str, user_id: str, ...) -> RawFileResp:
 定义在 `app/common/constants/codes.py` 中：
 
 ```python
-# 以下业务码定义于 app/common/constants/codes.py（权威来源）。
-# 此处仅供参考——请勿在其他地方重复定义。
-WORKSPACE_NOT_FOUND  = 404001   # 404xxx：资源未找到类错误码
-WORKSPACE_NOT_MEMBER = 404006   # 404xxx：资源未找到类错误码
-PERMISSION_DENIED    = 401003   # 401xxx：认证类错误码（工作区操作权限不足）
+# Business codes below are defined in app/common/constants/codes.py (authoritative source).
+# Listed here for reference only — do NOT redefine elsewhere.
+WORKSPACE_NOT_FOUND  = 404001   # 404xxx: resource not found
+WORKSPACE_NOT_MEMBER = 404006   # 404xxx: resource not found
+PERMISSION_DENIED    = 401003   # 401xxx: auth error (insufficient role for workspace action)
 ```
 
 这些业务码在 `ApiResp.code` 字段中返回，并在 SSE 错误事件中发送。

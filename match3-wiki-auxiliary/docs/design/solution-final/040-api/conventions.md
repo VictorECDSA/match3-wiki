@@ -28,9 +28,9 @@ def _default_request_id() -> str:
 
 class ApiReq(BaseModel, Generic[T]):
     """
-    统一请求信封。
-    所有 POST/PUT 端点接受 ApiReq[SomePayload]。
-    requestId 会在 ApiResp 中回传，供客户端关联请求。
+    Unified request envelope.
+    All POST/PUT endpoints accept ApiReq[SomePayload].
+    requestId is echoed back in ApiResp for client-side correlation.
     """
     model_config = ConfigDict(populate_by_name=True)
 
@@ -56,8 +56,8 @@ T = TypeVar("T")
 
 class ApiResp(BaseModel, Generic[T]):
     """
-    统一响应信封。
-    成功时 code=100000；出错时为非零值。
+    Unified response envelope.
+    code=100000 on success; non-zero on error.
     """
     model_config = ConfigDict(populate_by_name=True)
 
@@ -99,7 +99,7 @@ T = TypeVar("T")
 
 
 class ApiRespPage(BaseModel, Generic[T]):
-    """分页数据载体——作为 ApiResp 的 data 字段使用。"""
+    """Paginated data container — used as the data field of ApiResp."""
     model_config = ConfigDict(populate_by_name=True)
 
     total: int = Field(default=0)
@@ -146,7 +146,7 @@ logger = logging.getLogger(__name__)
 
 async def match3_exception_handler(request: Request, exc: Match3Exception) -> JSONResponse:
     request_id = getattr(request.state, "request_id", "unknown")
-    # resolve_code() 遍历 __cause__ 链，返回第一个非零业务码。
+    # resolve_code() walks the __cause__ chain and returns the first non-zero business code.
     code = exc.resolve_code()
 
     logger.error(
@@ -162,7 +162,7 @@ async def match3_exception_handler(request: Request, exc: Match3Exception) -> JS
         code=code,
         message=exc.message,
     )
-    # RPC 约定：HTTP 状态码始终为 200，业务结果通过响应体中的 code 字段传递。
+    # RPC convention: HTTP status is always 200; business result is carried in the response body code field.
     return JSONResponse(status_code=200, content=resp.model_dump(by_alias=True))
 
 
@@ -171,16 +171,16 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
     logger.exception("Unhandled exception: %s", exc)
 
-    # 这是整个代码库中唯一返回非 200 HTTP 状态码的地方。
-    # 所有 Match3Exception 业务错误均通过上方的 RPC 风格（status_code=200）处理。
+    # This is the only place in the codebase that returns a non-200 HTTP status.
+    # All Match3Exception business errors are handled above via RPC style (status_code=200).
     return JSONResponse(
         status_code=500,
-        content={"requestId": request_id, "code": codes.INTERNAL_ERROR, "message": "服务器内部错误，请稍后重试。", "data": None},
+        content={"requestId": request_id, "code": codes.INTERNAL_ERROR, "message": "internal server error, please retry later", "data": None},
     )
 
 
 async def request_id_middleware(request: Request, call_next) -> Response:
-    """从请求头注入 request_id，若无则自动生成。"""
+    """Inject request_id from header; generate one if absent."""
     request_id = request.headers.get("X-Request-Id", f"req-{__import__('uuid').uuid4()}")
     request.state.request_id = request_id
     response = await call_next(request)
@@ -198,7 +198,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.runtime import Match3Runtime
+from app.runtime.runtime import Match3Runtime
 from app.common.exceptions import Match3Exception
 from app.api.middleware import (
     match3_exception_handler,
@@ -231,22 +231,21 @@ def create_app(rt: Match3Runtime) -> FastAPI:
     app.state.rt = rt
 
     # CORS
-    app.add_middleware(
-        CORSMiddleware,
+    app.add_middleware(        CORSMiddleware,
         allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    # Request ID 中间件
+    # request ID middleware
     app.middleware("http")(request_id_middleware)
 
-    # 异常处理器
+    # exception handlers
     app.add_exception_handler(Match3Exception, match3_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
 
-    # 路由
+    # routers
     PREFIX = "/api/v1"
     app.include_router(health_router.create(rt), prefix=PREFIX, tags=["health"])
     app.include_router(ingest_router.create(rt), prefix=PREFIX, tags=["ingest"])

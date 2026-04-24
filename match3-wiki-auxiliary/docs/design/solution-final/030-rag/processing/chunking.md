@@ -9,24 +9,24 @@
 ## 整体流程
 
 ```
-原始文档（PDF / DOCX / HTML / MD / TXT）
+Raw documents (PDF / DOCX / HTML / MD / TXT)
     │
     ▼
-[步骤 1] 格式转 Markdown
-    │ pymupdf4llm / mammoth / markdownify / 直接跳过
+[Step 1] Convert format to Markdown
+    │ pymupdf4llm / mammoth / markdownify / skip directly
     ▼
-[步骤 2] 切块策略（二选一）
-    │ markdown_header：按标题切（首选，零成本）
-    │ fixed_size：RecursiveCharacterTextSplitter
+[Step 2] Chunking strategy (choose one)
+    │ markdown_header: split by heading (preferred, zero cost)
+    │ fixed_size: RecursiveCharacterTextSplitter
     ▼
-[步骤 3] Parent-Child 索引层（必须应用）
-    │ parent（1500 字）+ child（300 字，携带 parent_id）
-    │ 向量索引只存 child，查询命中 child → 返回 parent 上下文
+[Step 3] Parent-Child indexing layer (required)
+    │ parent (1500 chars) + child (300 chars, carries parent_id)
+    │ vector index stores child only; query hits child → returns parent context
     ▼
-[步骤 4] 三路并行建索引
+[Step 4] Three-way parallel indexing
     ├── Dense + Sparse Embedding → Milvus
-    ├── 原文 + metadata → Elasticsearch（BM25）
-    └── LLM 实体抽取 → Neo4j（可选）
+    ├── raw text + metadata → Elasticsearch (BM25)
+    └── LLM entity extraction → Neo4j (optional)
 ```
 
 ---
@@ -60,9 +60,9 @@
 **选择决策：**
 
 ```
-文档来源是什么？
-  ├─ 已有清晰 MD 标题结构 ──────────► markdown_header（首选，零成本）
-  └─ 无结构纯文本 / 标题切后节过长 ──► fixed_size（RecursiveCharacter）
+What is the document source?
+  ├─ Has clear MD heading structure ──────────► markdown_header (preferred, zero cost)
+  └─ Unstructured plain text / section too long after heading split ──► fixed_size (RecursiveCharacter)
 ```
 
 **实现文件**：`app/rag/chunker.py`
@@ -86,16 +86,16 @@
 把步骤 2 产生的 chunks 当作 parent，对每个 parent 再用 fixed_size 切出更小的 child。向量索引只存 child，每个 child 携带 `parent_id`。检索时命中 child，返回时取对应 parent（parent_splitter: 1500 字，child_splitter: 300 字）。
 
 ```
-文档
-  │ parent_splitter（1500 字）
+Document
+  │ parent_splitter (1500 chars)
   ▼
 [parent_1]       [parent_2]       [parent_3]
-  │ child_splitter（300 字）
+  │ child_splitter (300 chars)
   ▼
 [c1-1][c1-2][c1-3]  [c2-1][c2-2]  [c3-1][c3-2][c3-3]
-  │ 向量索引存 child，携带 parent_id
+  │ vector index stores child only, carries parent_id
   ▼
-查询时：child 精准匹配 → 取 parent_id → 返回完整 parent 上下文
+Query: child exact match → fetch parent_id → return full parent context
 ```
 
 如果某个 parent 本身已经很短（如标题切块后的短节），可跳过 child 拆分，直接以 parent 同时充当 child 入索引。

@@ -5,97 +5,147 @@
 ```
 backend/
 ├── app/
-│   ├── main.py                         # FastAPI 应用工厂——构建 Config、Env、Runtime，挂载路由
-│   ├── runtime.py                      # Match3Runtime 冻结 dataclass + Protocol 接口 + build_runtime()
+│   ├── cli/
+│   │   ├── __main__.py                     # python -m app.cli entry point
+│   │   ├── api.py                          # Start FastAPI: load Config/Env, build_runtime(), mount routers
+│   │   └── worker.py                       # Start Celery worker for specified queue
+│   │
+│   ├── runtime/
+│   │   ├── runtime.py                      # Match3Runtime (frozen dataclass, all fields are Protocol types)
+│   │   └── protocols/
+│   │       ├── logger/
+│   │       │   ├── logger.py               # Logger (Protocol)
+│   │       │   └── log_config.py           # LogConfig (dataclass)
+│   │       ├── cache_store/
+│   │       │   └── cache_store.py          # CacheStore (Protocol)
+│   │       ├── message_queue/
+│   │       │   └── message_queue.py        # MessageQueue (Protocol)
+│   │       ├── vector_db/
+│   │       │   ├── vector_db.py            # VectorDatabase (Protocol)
+│   │       │   └── vector_search_result.py # VectorSearchResult (Protocol)
+│   │       ├── graph_db/
+│   │       │   ├── graph_db.py             # GraphDatabase (Protocol)
+│   │       │   ├── graph_session.py        # GraphSession (Protocol)
+│   │       │   ├── graph_transaction.py    # GraphTransaction (Protocol)
+│   │       │   └── graph_query_result.py   # GraphQueryResult (Protocol)
+│   │       ├── database/
+│   │       │   ├── database_engine.py      # DatabaseEngine (Protocol)
+│   │       │   └── database_session.py     # DatabaseSession (Protocol)
+│   │       ├── fulltext_search/
+│   │       │   ├── fulltext_search.py      # FullTextSearch (Protocol)
+│   │       │   └── search_result.py        # SearchResult (Protocol)
+│   │       └── object_storage/
+│   │           ├── object_storage.py       # ObjectStorage (Protocol)
+│   │           └── storage_object.py       # StorageObject (Protocol)
+│   │
+│   ├── runtime_impl/
+│   │   ├── runtime.py                      # build_runtime(config, env, logger) -> Match3Runtime
+│   │   └── implements/
+│   │       ├── logger/
+│   │       │   ├── logger.py               # create_logger(config) -> Logger
+│   │       │   └── impl_loguru/
+│   │       │       └── loguru_logger.py    # LoguruLogger
+│   │       ├── cache_store/
+│   │       │   ├── cache_store.py          # create_cache_store(config, env, logger) -> CacheStore
+│   │       │   └── impl_redis/
+│   │       │       └── redis_cache_store.py
+│   │       ├── message_queue/
+│   │       │   ├── message_queue.py        # create_message_queue(config, env, logger) -> MessageQueue
+│   │       │   └── impl_redis/
+│   │       │       └── redis_message_queue.py
+│   │       ├── vector_db/
+│   │       │   ├── vector_db.py            # create_vector_database(...) -> VectorDatabase
+│   │       │   └── impl_milvus/
+│   │       │       ├── milvus_vector_db.py
+│   │       │       └── milvus_vector_search_result.py
+│   │       ├── graph_db/
+│   │       │   ├── graph_db.py             # create_graph_database(...) -> GraphDatabase
+│   │       │   └── impl_neo4j/
+│   │       │       ├── neo4j_graph_db.py
+│   │       │       ├── neo4j_graph_session.py
+│   │       │       ├── neo4j_graph_transaction.py
+│   │       │       └── neo4j_graph_query_result.py
+│   │       ├── database/
+│   │       │   ├── database.py             # create_database_engine(...) -> DatabaseEngine
+│   │       │   └── impl_postgresql/
+│   │       │       ├── postgresql_engine.py
+│   │       │       └── postgresql_session.py
+│   │       ├── fulltext_search/
+│   │       │   ├── fulltext_search.py      # create_fulltext_search(...) -> FullTextSearch
+│   │       │   └── impl_elasticsearch/
+│   │       │       ├── elasticsearch_search.py
+│   │       │       └── elasticsearch_search_result.py
+│   │       └── object_storage/
+│   │           ├── object_storage.py       # create_object_storage(...) -> ObjectStorage
+│   │           └── impl_minio/
+│   │               ├── minio_object_storage.py
+│   │               └── minio_storage_object.py
 │   │
 │   ├── config/
-│   │   ├── __init__.py
-│   │   ├── config.py                   # Config（来自 config.yaml）：连接池大小、模型名称、功能开关、日志级别
-│   │   └── env.py                      # Env（来自 .env）：数据库凭证、API Key、JWT 密钥——全部必填
+│   │   ├── config.py                       # Config (from config.yaml): pool sizes, model names, feature flags
+│   │   └── env.py                          # Env (from .env): DB credentials, API keys, JWT secret — all required
 │   │
-│   ├── intelligence/                   # Runtime Protocol 接口的具体实现
-│   │   ├── __init__.py
-│   │   ├── llm.py                      # OpenAILLMCaller、AnthropicLLMCaller——实现 LLMCaller
-│   │   ├── embedder.py                 # OpenAIEmbedder——实现 Embedder
-│   │   ├── image_embedder.py           # CLIPImageEmbedder——实现 ImageEmbedder
-│   │   ├── transcriber.py              # WhisperTranscriber——实现 Transcriber
-│   │   ├── reranker.py                 # CrossEncoderReranker——实现 Reranker
-│   │   ├── storage.py                  # MinioObjectStorage——实现 ObjectStorage
-│   │   └── pageindex.py               # VectifyPageIndexClient——实现 PageIndexClient
+│   ├── intelligence/                       # Intelligence layer implementations (LLM, Embedder, Reranker, etc.)
+│   │   ├── llm.py                          # OpenAILLMCaller, AnthropicLLMCaller
+│   │   ├── embedder.py                     # OpenAIEmbedder (Dense + BGE-M3 Sparse)
+│   │   ├── image_embedder.py               # CLIPImageEmbedder
+│   │   ├── transcriber.py                  # WhisperTranscriber
+│   │   ├── reranker.py                     # CrossEncoderReranker
+│   │   └── pageindex.py                    # VectifyPageIndexClient
 │   │
 │   ├── common/
-│   │   ├── __init__.py
-│   │   ├── exceptions.py               # Match3Exception（of / of_code / ctx / as_ex）
+│   │   ├── exceptions.py                   # Match3Exception (of / of_code / ctx / as_ex)
 │   │   └── constants/
-│   │       ├── __init__.py
-│   │       ├── codes.py                # 业务码常量（SUCCESS、AUTH_FAILED 等）
-│   │       └── constants.py            # 非错误码魔法常量（队列名、集合名、chunk 类型等）
+│   │       ├── codes.py                    # Business code constants (SUCCESS, AUTH_FAILED, etc.)
+│   │       └── constants.py                # Non-error-code magic constants (queue names, collection names, chunk types, etc.)
 │   │
 │   ├── api/
-│   │   ├── __init__.py
-│   │   ├── api.py                      # register_routers(app)——挂载所有路由
-│   │   ├── api_req.py                  # ApiReq[T]——带 request_id 的请求包装器
-│   │   ├── api_resp.py                 # ApiResp[T]——统一响应信封
-│   │   ├── api_resp_page.py            # ApiRespPage[T]——分页响应
-│   │   ├── middleware.py               # JWT + RBAC + 限流中间件
-│   │   │
+│   │   ├── api.py                          # register_routers(app) — mount all routers
+│   │   ├── api_req.py                      # ApiReq[T] — request wrapper with request_id
+│   │   ├── api_resp.py                     # ApiResp[T] — unified response envelope
+│   │   ├── api_resp_page.py                # ApiRespPage[T] — paginated response
+│   │   ├── middleware.py                   # JWT + RBAC + rate-limit middleware
 │   │   ├── ingest/
-│   │   │   ├── __init__.py
-│   │   │   ├── router.py               # /api/v1/ingest 路由
-│   │   │   ├── models.py               # 请求/响应 Pydantic 模型
-│   │   │   └── handler.py              # 路由处理器（精简，委托给 service）
-│   │   │
+│   │   │   ├── router.py                   # /api/v1/ingest routes
+│   │   │   ├── models.py                   # Request/response Pydantic models
+│   │   │   └── handler.py                  # Route handlers (thin, delegates to service)
 │   │   ├── wiki/
-│   │   │   ├── __init__.py
-│   │   │   ├── router.py               # /api/v1/wiki 路由
+│   │   │   ├── router.py                   # /api/v1/wiki routes
 │   │   │   ├── models.py
 │   │   │   └── handler.py
-│   │   │
 │   │   ├── qa/
-│   │   │   ├── __init__.py
-│   │   │   ├── router.py               # /api/v1/qa 路由（SSE）
+│   │   │   ├── router.py                   # /api/v1/qa routes (SSE)
 │   │   │   ├── models.py
 │   │   │   └── handler.py
-│   │   │
 │   │   └── admin/
-│   │       ├── __init__.py
-│   │       ├── router.py               # /api/v1/admin 路由
+│   │       ├── router.py                   # /api/v1/admin routes
 │   │       ├── models.py
 │   │       └── handler.py
 │   │
 │   ├── services/
-│   │   ├── __init__.py
-│   │   ├── ingest_service.py           # 编排文件上传→任务入队
-│   │   ├── wiki_compile_service.py     # 触发 wiki 编译任务
-│   │   ├── qa_service.py               # RAG 路由→答案生成→SSE
-│   │   └── admin_service.py            # 用户/工作区/权限管理
+│   │   ├── ingest_service.py               # Orchestrate file upload → task enqueue
+│   │   ├── wiki_compile_service.py         # Trigger wiki compilation task
+│   │   ├── qa_service.py                   # RAG routing → answer generation → SSE
+│   │   └── admin_service.py                # User / workspace / permission management
 │   │
 │   ├── rag/
-│   │   ├── __init__.py
-│   │   ├── router.py                   # AdaptiveRAG：将查询路由至对应 path
-│   │   ├── chunker.py                  # markdown_header / fixed_size chunking
-│   │   │
-│   │   ├── hybrid_search_engine.py     # HybridSearchEngine: config-driven 5-stage pipeline
-│   │   ├── retrieval_config.py         # RetrievalConfig, RerankLevel, ValidationMode
-│   │   ├── retrieval_profiles.py       # PROFILE_MAP: complexity → RetrievalConfig
-│   │   ├── multi_agent.py              # multi-agent RAG (domain agents + verifier + writer)
-│   │   │
-│   │   ├── entry/                      # wiki-lookup: wiki compile + query
-│   │   │   ├── __init__.py
-│   │   │   ├── compile_pipeline.py     # 5-step OpenKB pipeline
+│   │   ├── router.py                       # AdaptiveRAGRouter: route query to appropriate path
+│   │   ├── chunker.py                      # semantic_chunk(): semantic chunking (fixed-size fallback)
+│   │   ├── hybrid_search_engine.py         # HybridSearchEngine: config-driven five-stage retrieval pipeline
+│   │   ├── retrieval_config.py             # RetrievalConfig, RerankLevel, ValidationMode
+│   │   ├── retrieval_profiles.py           # PROFILE_MAP: complexity → RetrievalConfig
+│   │   ├── multi_agent.py                  # Multi-agent RAG (domain agents + validator + writer)
+│   │   ├── entry/                          # wiki-lookup: entry lookup + wiki compilation
+│   │   │   ├── compile_pipeline.py         # OpenKB five-step compilation pipeline
 │   │   │   └── entry_lookup.py
-│   │   │
-│   │   └── page/                       # doc-navigate: PageIndex long-document retrieval
-│   │       ├── __init__.py
+│   │   └── page/                           # doc-navigate: PageIndex long-document retrieval
 │   │       └── pageindex_retriever.py
 │   │
 │   ├── storage/
-│   │   ├── __init__.py
-│   │   ├── orm_base.py                 # DeclarativeBase
-│   │   ├── graph_store.py              # GraphStore（Neo4j 封装）
-│   │   ├── milvus_store.py             # MilvusStore（Milvus 封装）
-│   │   ├── models/                     # SQLAlchemy ORM 模型
-│   │   │   ├── __init__.py
+│   │   ├── orm_base.py                     # DeclarativeBase
+│   │   ├── graph_store.py                  # GraphStore (Neo4j wrapper)
+│   │   ├── milvus_store.py                 # MilvusStore (Milvus wrapper)
+│   │   ├── models/                         # SQLAlchemy ORM models
 │   │   │   ├── workspace.py
 │   │   │   ├── user.py
 │   │   │   ├── raw_file.py
@@ -103,10 +153,8 @@ backend/
 │   │   │   ├── wiki_page.py
 │   │   │   ├── qa_session.py
 │   │   │   └── qa_turn.py
-│   │   │
-│   │   └── repositories/               # Repository 模式
-│   │       ├── __init__.py
-│   │       ├── base_repo.py            # BaseRepository[T]，含 insert/tx_insert/find 等方法
+│   │   └── repositories/                   # Repository pattern
+│   │       ├── base_repo.py                # BaseRepository[T] with insert/tx_insert/find etc.
 │   │       ├── workspace_repo.py
 │   │       ├── user_repo.py
 │   │       ├── raw_file_repo.py
@@ -115,15 +163,18 @@ backend/
 │   │       └── qa_repo.py
 │   │
 │   └── workers/
-│       ├── __init__.py
-│       ├── celery_app.py               # Celery 应用工厂
+│       ├── celery_app.py                   # Celery application factory
 │       ├── ingest_task.py
 │       ├── embed_task.py
 │       ├── graph_task.py
 │       ├── compile_task.py
 │       └── rag_task.py
 │
-├── alembic/                            # Alembic 迁移（与 alembic.ini 同级）
+├── tests/
+│   ├── unit/                               # Unit tests (pure Mock, no real services started)
+│   └── integration/                        # Integration tests
+│
+├── alembic/                                # Alembic migrations (same level as alembic.ini)
 │   ├── env.py
 │   ├── script.py.mako
 │   └── versions/
@@ -142,51 +193,51 @@ backend/
 ```
 frontend/
 ├── app/
-│   ├── layout.tsx                      # 根布局（认证 Provider、侧边栏）
-│   ├── page.tsx                        # 仪表盘/首页
+│   ├── layout.tsx                      # Root layout (auth Provider, sidebar)
+│   ├── page.tsx                        # Dashboard / home page
 │   │
 │   ├── wiki/
-│   │   ├── page.tsx                    # Wiki 列表——按主题列出所有页面
+│   │   ├── page.tsx                    # Wiki list — all pages listed by topic
 │   │   ├── [slug]/
-│   │   │   └── page.tsx                # Wiki 单页查看器
+│   │   │   └── page.tsx                # Single wiki page viewer
 │   │   └── compile/
-│   │       └── page.tsx                # 触发 wiki 编译
+│   │       └── page.tsx                # Trigger wiki compilation
 │   │
 │   ├── raw/
-│   │   ├── page.tsx                    # 原始文件列表
+│   │   ├── page.tsx                    # Raw file list
 │   │   └── upload/
-│   │       └── page.tsx                # 上传并追踪摄入状态
+│   │       └── page.tsx                # Upload and track ingest status
 │   │
 │   ├── qa/
-│   │   └── page.tsx                    # Q&A 聊天界面（SSE 流式）
+│   │   └── page.tsx                    # Q&A chat interface (SSE streaming)
 │   │
 │   └── admin/
-│       ├── page.tsx                    # 管理员仪表盘
+│       ├── page.tsx                    # Admin dashboard
 │       ├── users/page.tsx
 │       └── workspace/page.tsx
 │
 ├── components/
 │   ├── wiki/
-│   │   ├── WikiViewer.tsx              # Markdown 渲染器，含 wikilink 支持
-│   │   ├── WikiEditor.tsx              # 浏览器内 wiki 编辑（可选）
-│   │   └── WikiGraph.tsx              # Neo4j 图可视化
+│   │   ├── WikiViewer.tsx              # Markdown renderer with wikilink support
+│   │   ├── WikiEditor.tsx              # In-browser wiki editing (optional)
+│   │   └── WikiGraph.tsx              # Neo4j graph visualisation
 │   ├── qa/
-│   │   ├── QAChat.tsx                 # 聊天 UI，含 SSE token 流式渲染
+│   │   ├── QAChat.tsx                 # Chat UI with SSE token streaming
 │   │   ├── QAMessage.tsx
-│   │   └── SourceCitations.tsx        # 展示检索到的来源 chunk
+│   │   └── SourceCitations.tsx        # Display retrieved source chunks
 │   ├── ingest/
-│   │   ├── IngestDropzone.tsx         # 拖拽文件上传
-│   │   └── IngestStatus.tsx           # 任务状态轮询
+│   │   ├── IngestDropzone.tsx         # Drag-and-drop file upload
+│   │   └── IngestStatus.tsx           # Task status polling
 │   └── shared/
 │       ├── Sidebar.tsx
 │       ├── TopBar.tsx
 │       └── LoadingSpinner.tsx
 │
 ├── lib/
-│   ├── api.ts                          # API 客户端（带认证的 fetch 封装）
-│   ├── constants.ts                    # SUCCESS_CODES 集合、错误码、API 路径、SSE 字段名
-│   ├── sse.ts                          # SSE 客户端 hook
-│   └── types.ts                        # 共享 TypeScript 类型
+│   ├── api.ts                          # API client (authenticated fetch wrapper)
+│   ├── constants.ts                    # SUCCESS_CODES set, error codes, API paths, SSE field names
+│   ├── sse.ts                          # SSE client hook
+│   └── types.ts                        # Shared TypeScript types
 │
 ├── next.config.ts
 ├── tailwind.config.ts
@@ -201,10 +252,10 @@ frontend/
 
 ```
 docker/
-├── docker-compose.yml                  # 完整本地技术栈（详见 08-deployment/）
-├── docker-compose.override.yml         # 开发环境覆盖（热重载、调试端口）
+├── docker-compose.yml                  # Full local stack (see 08-deployment/)
+├── docker-compose.override.yml         # Dev environment overrides (hot-reload, debug ports)
 ├── postgres/
-│   └── init.sql                        # 数据库 + 用户创建
+│   └── init.sql                        # Database + user creation
 ├── milvus/
 │   └── standalone.yaml
 ├── elasticsearch/
@@ -219,14 +270,14 @@ docker/
 
 ```
 match3-wiki/
-├── backend/                            # FastAPI 后端
-├── frontend/                           # Next.js 前端
-├── docker/                             # 基础设施配置
+├── backend/                            # FastAPI backend
+├── frontend/                           # Next.js frontend
+├── docker/                             # Infrastructure configuration
 ├── scripts/
-│   ├── init_db.py                      # 执行 Alembic 迁移 + 种子数据
-│   ├── init_milvus.py                  # 创建集合
-│   ├── init_es.py                      # 创建索引
-│   ├── init_neo4j.py                   # 创建约束 + 索引
-│   └── test_connections.py             # 验证所有服务可达
+│   ├── init_db.py                      # Run Alembic migrations + seed data
+│   ├── init_milvus.py                  # Create collections
+│   ├── init_es.py                      # Create indices
+│   ├── init_neo4j.py                   # Create constraints + indices
+│   └── test_connections.py             # Verify all services are reachable
 └── README.md
 ```

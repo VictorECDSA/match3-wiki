@@ -39,14 +39,14 @@
 
 ```
 PENDING
-  │  ingest_file 开始执行
+  │  ingest_file starts
   ▼
 PROCESSING
-  │  bulk_insert 成功
+  │  bulk_insert succeeds
   ▼
-DONE  ──→  embed_task 继续
+DONE  ──→  embed_task continues
   │
-  │  任何异常（含超过 max_retries）
+  │  any exception (including max_retries exceeded)
   ▼
 FAILED
 ```
@@ -73,8 +73,11 @@ def ingest_file(self, raw_file_id: str) -> str:
     raw_file_repo.update(raw_file)
 
     try:
+        from app.intelligence.llm import OpenAILLMCaller
+        llm = OpenAILLMCaller(api_key=rt.env.OPENAI_API_KEY, model=rt.config.llm.default_model)
+
         file_bytes = rt.storage.get_object(raw_file.object_key)
-        pages      = parse_file(file_bytes, raw_file.filename, raw_file.file_type, rt.llm, ...)
+        pages      = parse_file(file_bytes, raw_file.filename, raw_file.file_type, llm, ...)
 
         all_chunks = []
         for page_idx, page_text in enumerate(pages):

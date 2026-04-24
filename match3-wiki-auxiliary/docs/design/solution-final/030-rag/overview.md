@@ -17,23 +17,23 @@ RAG 模块分为两条完全独立的流程——**索引流程**（离线，文
 ### 索引流程（离线）
 
 ```
-原始文档（PDF / DOCX / HTML / MD）
+Raw document (PDF / DOCX / HTML / MD)
     │
     ▼
-[1] 格式转 Markdown                               ┐
-    │                                             │ chunking.md
-    ▼                                             │
-[2] 切块策略（markdown_header 或 fixed_size）      │
-    │                                             │
-    ▼                                             │
-[3] Parent-Child 分层（必须应用）                  │
-    │ child（300 字）携带 parent_id                │
-    │ 查询命中 child → 返回 parent（1500 字）上下文 ┘
+[1] Convert to Markdown                                      ┐
+    │                                                        │ chunking.md
+    ▼                                                        │
+[2] Chunking strategy (markdown_header or fixed_size)        │
+    │                                                        │
+    ▼                                                        │
+[3] Parent-Child layering (mandatory)                        │
+    │ child (300 chars) carries parent_id                    │
+    │ query hits child → returns parent (1500 chars) context ┘
     ▼
-[4] 三路并行建索引                                 ┐
-    ├── embed_task: Dense + Sparse → Milvus       │ indexing.md
-    ├── embed_task: 原文 + metadata → ES（BM25）   │
-    └── graph_task: LLM 实体抽取 → Neo4j（可选）   ┘
+[4] Three-channel parallel indexing                          ┐
+    ├── embed_task: Dense + Sparse → Milvus                  │ indexing.md
+    ├── embed_task: raw text + metadata → ES (BM25)          │
+    └── graph_task: LLM entity extraction → Neo4j (optional) ┘
 ```
 
 Wiki 页面的索引流程独立，走 OpenKB 五步编译流水线——见 `030-rag/processing/wiki-compile.md`。
@@ -41,17 +41,17 @@ Wiki 页面的索引流程独立，走 OpenKB 五步编译流水线——见 `03
 ### 检索流程（在线）
 
 ```
-用户查询
+User query
     │
     ▼
 AdaptiveRAGRouter → (path, complexity)
     │
-    ├── chunk  → HybridSearchEngine 五阶段流水线（查询扩展→多通道检索→RRF融合→精排→验证）
+    ├── chunk  → HybridSearchEngine 5-stage pipeline (query expansion → multi-channel retrieval → RRF fusion → rerank → validation)
     ├── entry  → lookup_or_trigger_compile()
-    └── page   → PageIndexRetriever 目录树导航
+    └── page   → PageIndexRetriever TOC-tree navigation
     │
     ▼
-LLM 生成（SSE 流式输出）
+LLM generation (SSE streaming output)
 ```
 
 ---

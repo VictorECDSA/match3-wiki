@@ -20,8 +20,8 @@ lookup_or_trigger_compile(rt, query, workspace_id) → WikiPage | None
 ```
 page = lookup_or_trigger_compile(rt, query, workspace_id)
 
-if page is None:     yield "未找到该主题的 Wiki 条目，已加入编译队列。"; return
-if COMPILING:        yield "该 Wiki 页面正在编译中，请稍后再试。";       return
+if page is None:     yield "No Wiki entry found for this topic; compilation queued.";  return
+if COMPILING:        yield "This Wiki page is being compiled, please try again later."; return
 
 yield from _stream_llm(system_prompt, f"Wiki page content:\n\n{page.content}\n\nQuestion: {query}")
 ```

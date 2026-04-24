@@ -64,12 +64,12 @@
 ## 二、服务器初始化
 
 ```bash
-# 1. 安装 Docker + Docker Compose
+# 1. Install Docker + Docker Compose
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 newgrp docker
 
-# 2. 安装 NVIDIA Container Toolkit（仅 GPU 服务器）
+# 2. Install NVIDIA Container Toolkit (GPU servers only)
 distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
 curl -s -L https://nvidia.github.io/libnvidia-container/gpgkey | sudo apt-key add -
 curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
@@ -77,19 +77,19 @@ curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-
 sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
 sudo systemctl restart docker
 
-# 3. 挂载数据盘（假设设备为 /dev/vdb）
+# 3. Mount data disk (assuming device is /dev/vdb)
 sudo mkfs.ext4 /dev/vdb
 sudo mkdir -p /data
 echo '/dev/vdb /data ext4 defaults 0 0' | sudo tee -a /etc/fstab
 sudo mount -a
 
-# 4. 创建数据目录
+# 4. Create data directories
 sudo mkdir -p /data/{postgres,redis,milvus,elasticsearch,neo4j,minio,logs}
 sudo chown -R 1000:1000 /data
 
-# 5. 创建项目目录并复制 .env
+# 5. Create project directory and copy .env
 sudo mkdir -p /opt/match3-wiki
-# 将 .env.example 复制到 /opt/match3-wiki/.env 并填写真实值
+# Copy .env.example to /opt/match3-wiki/.env and fill in real values
 ```
 
 ---
@@ -136,7 +136,7 @@ x-common-env: &common-env
 services:
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: match3
@@ -150,7 +150,7 @@ services:
           memory: 4G
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.6.2-alpine
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
     volumes:
@@ -161,7 +161,7 @@ services:
           memory: 2G
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-10-15
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -175,7 +175,7 @@ services:
           memory: 2G
 
   milvus:
-    image: milvusdb/milvus:v2.4.0
+    image: milvusdb/milvus:v2.6.14
     restart: unless-stopped
     command: milvus run standalone
     environment:
@@ -203,7 +203,7 @@ services:
       - /data/milvus/etcd:/etcd
 
   neo4j:
-    image: neo4j:5
+    image: neo4j:2026.03.1
     restart: unless-stopped
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
@@ -216,7 +216,7 @@ services:
           memory: 4G
 
   elasticsearch:
-    image: elasticsearch:8.12.0
+    image: elasticsearch:9.3.3
     restart: unless-stopped
     environment:
       discovery.type: single-node
@@ -237,7 +237,7 @@ services:
     environment:
       <<: *common-env
     ports:
-      - "127.0.0.1:8000:8000"   # 仅暴露给本机 — 由 Nginx 反向代理对外
+      - "127.0.0.1:8000:8000"   # localhost only — exposed externally via Nginx reverse proxy
     depends_on:
       - postgres
       - redis
@@ -342,8 +342,8 @@ services:
 `Makefile` 放在项目根目录，随代码一起上传到服务器。`remote.sh` 部署后通过 SSH 调用对应的 make target 完成服务管理。
 
 ```makefile
-# Makefile — 远程服务管理目标
-# 所有目标均由 remote.sh 在代码上传后通过 SSH 调用。
+# Makefile — remote service management targets
+# All targets are invoked via SSH by remote.sh after code upload.
 
 COMPOSE := docker compose -f docker-compose.prod.yml
 
@@ -351,7 +351,7 @@ COMPOSE := docker compose -f docker-compose.prod.yml
         restart restart-backend restart-frontend \
         stop status logs logs-backend logs-workers undeploy
 
-# --- 全量部署（首次或完整重建）---
+# --- Full deploy (first-time or complete rebuild) ---
 
 deploy: deploy-infra migrate deploy-backend deploy-frontend
 
@@ -364,12 +364,12 @@ deploy-backend:
 deploy-frontend:
 	$(COMPOSE) up -d --build nginx
 
-# --- 数据库迁移 ---
+# --- Database migration ---
 
 migrate:
 	$(COMPOSE) run --rm api alembic upgrade head
 
-# --- 重启目标 ---
+# --- Restart targets ---
 
 restart:
 	$(COMPOSE) restart
@@ -380,7 +380,7 @@ restart-backend:
 restart-frontend:
 	$(COMPOSE) restart nginx
 
-# --- 监控 ---
+# --- Monitoring ---
 
 stop:
 	$(COMPOSE) stop
@@ -397,7 +397,7 @@ logs-backend:
 logs-workers:
 	$(COMPOSE) logs worker-ingest worker-graph worker-compile worker-rag --tail=50 -f
 
-# --- 销毁 ---
+# --- Destroy ---
 
 undeploy:
 	$(COMPOSE) down -v
@@ -412,7 +412,7 @@ undeploy:
 `remote.sh` 放在本地开发机的项目 `tools/` 目录下，**不上传到服务器**。流程如下：
 
 ```
-本地: 读取 .env → 验证 SSH → 打 tar 包 → scp 上传 → SSH 解压 → SSH 执行 make <target>
+local: read .env → verify SSH → create tar → scp upload → SSH extract → SSH run make <target>
 ```
 
 | 操作 | 说明 |
@@ -427,18 +427,18 @@ undeploy:
 ### 5.2 .env.example
 
 ```bash
-# tools/.env.example — 复制为 tools/.env 并填写真实值
+# tools/.env.example — copy to tools/.env and fill in real values
 
-# SSH 凭证
+# SSH credentials
 SSH_KEY=/path/to/your/ssh/private/key
 SSH_USER=ubuntu
 SSH_HOST=1.2.3.4
 
-# 路径
+# Paths
 REMOTE_PROJECT_DIR=/opt/match3-wiki
 LOCAL_PROJECT_DIR=/path/to/local/match3-wiki
 
-# 服务 URL（用于健康检查和信息展示）
+# Service URLs (for health checks and info display)
 BACKEND_URL=https://api.match3wiki.com
 FRONTEND_URL=https://match3wiki.com
 ```
@@ -447,51 +447,51 @@ FRONTEND_URL=https://match3wiki.com
 
 ```bash
 #!/bin/bash
-# match3-wiki 远程管理脚本
-# 用法: ./remote.sh [OPTIONS]
+# match3-wiki remote management script
+# Usage: ./remote.sh [OPTIONS]
 
 set -e
 
 # ============================================================================
-# 帮助信息
+# Help text
 # ============================================================================
 
 show_help() {
-    echo "match3-wiki 远程管理脚本"
+    echo "match3-wiki remote management script"
     echo ""
-    echo "用法: $0 [OPTIONS]"
+    echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "部署命令:"
-    echo "  --deploy-backend          上传代码 + make deploy-backend"
-    echo "  --deploy-frontend         上传代码 + make deploy-frontend"
-    echo "  --deploy-all              上传代码 + make deploy（全栈部署）"
-    echo "  --light                   仅上传代码，跳过 make 目标（配合 --deploy-frontend 或 --deploy-all 使用）"
+    echo "Deploy commands:"
+    echo "  --deploy-backend          Upload code + make deploy-backend"
+    echo "  --deploy-frontend         Upload code + make deploy-frontend"
+    echo "  --deploy-all              Upload code + make deploy (full-stack deploy)"
+    echo "  --light                   Upload code only, skip make target (use with --deploy-frontend or --deploy-all)"
     echo ""
-    echo "远程 make 控制:"
-    echo "  --run <target> [args...]  在远程服务器执行: make <target>"
-    echo "                            示例: --run status, --run logs-backend, --run migrate"
+    echo "Remote make control:"
+    echo "  --run <target> [args...]  Execute on remote server: make <target>"
+    echo "                            Examples: --run status, --run logs-backend, --run migrate"
     echo ""
-    echo "销毁命令:"
-    echo "  --undeploy                停止并删除所有容器 + 卷（需要确认）"
-    echo "  -f, --force               跳过 --undeploy 的确认提示"
+    echo "Destroy commands:"
+    echo "  --undeploy                Stop and remove all containers + volumes (requires confirmation)"
+    echo "  -f, --force               Skip confirmation prompt for --undeploy"
     echo ""
-    echo "其他:"
-    echo "  -h, --help                显示此帮助信息"
+    echo "Other:"
+    echo "  -h, --help                Show this help message"
     echo ""
-    echo "示例:"
-    echo "  $0 --deploy-all                     # 首次全量部署"
-    echo "  $0 --deploy-backend                 # 重建并重启后端容器"
-    echo "  $0 --deploy-frontend                # 重建并重启前端/Nginx"
-    echo "  $0 --deploy-frontend --light        # 仅上传前端代码（不重启）"
-    echo "  $0 --run status                     # 检查远程服务状态"
-    echo "  $0 --run logs-backend               # 追踪后端 API 日志"
-    echo "  $0 --run migrate                    # 仅执行 DB 迁移"
-    echo "  $0 --run restart-backend            # 重启后端（不重建）"
-    echo "  $0 --undeploy --force               # 无需确认直接销毁所有内容"
+    echo "Examples:"
+    echo "  $0 --deploy-all                     # First-time full deploy"
+    echo "  $0 --deploy-backend                 # Rebuild and restart backend containers"
+    echo "  $0 --deploy-frontend                # Rebuild and restart frontend/Nginx"
+    echo "  $0 --deploy-frontend --light        # Upload frontend code only (no restart)"
+    echo "  $0 --run status                     # Check remote service status"
+    echo "  $0 --run logs-backend               # Tail backend API logs"
+    echo "  $0 --run migrate                    # Run DB migration only"
+    echo "  $0 --run restart-backend            # Restart backend (no rebuild)"
+    echo "  $0 --undeploy --force               # Destroy everything without confirmation"
 }
 
 # ============================================================================
-# 常量（load_environment 执行后填充）
+# Constants (populated after load_environment runs)
 # ============================================================================
 
 declare SCRIPT_DIR
@@ -499,32 +499,32 @@ declare SSH_KEY SSH_USER SSH_HOST
 declare REMOTE_PROJECT_DIR LOCAL_PROJECT_DIR
 declare BACKEND_URL FRONTEND_URL
 
-# 打包变量（create_package 时设置）
+# Package variables (set by create_package)
 declare PACKAGE_PATH PACKAGE_NAME TEMP_DIR
 
-# 永不上传的文件
+# Files that are never uploaded
 BACKEND_EXCLUDE="__pycache__ .pytest_cache .mypy_cache"
 FRONTEND_EXCLUDE="node_modules .next .env.local"
 
-# 后续部署时在远程保留的文件（永不被清理覆盖）
+# Files to preserve on remote during subsequent deploys (never overwritten)
 REMOTE_PRESERVE=".env"
 
 IS_FIRST_DEPLOY=false
 
 # ============================================================================
-# 主要操作
+# Main operations
 # ============================================================================
 
 main_deploy() {
-    local mode="$1"   # backend | frontend | all（固定值）
+    local mode="$1"   # backend | frontend | all (fixed values)
     load_environment
-    print_banner "match3-wiki 部署 ($mode)"
+    print_banner "match3-wiki deploy ($mode)"
     verify_ssh_connection
 
     if is_first_deploy; then
         IS_FIRST_DEPLOY=true
         if [ "$ARG_LIGHT" = true ]; then
-            echo "错误: --light 不能用于首次部署"
+            echo "Error: --light cannot be used for first-time deploy"
             exit 1
         fi
     fi
@@ -533,9 +533,9 @@ main_deploy() {
 
     if [ "$ARG_LIGHT" = true ]; then
         echo ""
-        echo "轻量模式: 代码已上传，跳过 make 目标"
-        echo "执行 '$0 --run deploy-frontend' 手动重启"
-        print_completion "轻量部署 ($mode)"
+        echo "Light mode: code uploaded, skipping make target"
+        echo "Run '$0 --run deploy-frontend' to restart manually"
+        print_completion "light deploy ($mode)"
         return
     fi
 
@@ -545,34 +545,34 @@ main_deploy() {
         all)      run_remote_make "deploy" ;;
     esac
 
-    print_completion "部署 ($mode)"
+    print_completion "deploy ($mode)"
     display_service_info
 }
 
 main_run() {
     local target="$1"
     load_environment
-    print_banner "match3-wiki 远程 Make: $target"
+    print_banner "match3-wiki remote make: $target"
     verify_ssh_connection
     run_remote_make "$target"
-    print_completion "远程 Make: $target"
+    print_completion "remote make: $target"
 }
 
 main_undeploy() {
     load_environment
-    print_banner "match3-wiki 销毁"
+    print_banner "match3-wiki destroy"
 
     if [ "$ARG_FORCE" != true ]; then
-        echo "警告: 此操作将停止并删除所有容器、卷和数据！"
+        echo "WARNING: This will stop and remove all containers, volumes, and data!"
         echo ""
-        echo "包括:"
-        echo "  - 所有运行中的 Docker 容器（api、workers、nginx、postgres、redis、milvus 等）"
-        echo "  - 所有 Docker 卷（数据库数据、向量库、文件存储）"
-        echo "  - 此操作不可逆"
+        echo "Includes:"
+        echo "  - All running Docker containers (api, workers, nginx, postgres, redis, milvus, etc.)"
+        echo "  - All Docker volumes (database data, vector store, file storage)"
+        echo "  - This operation is irreversible"
         echo ""
-        read -p "输入 'DELETE' 确认: " confirm
+        read -p "Type 'DELETE' to confirm: " confirm
         if [ "$confirm" != "DELETE" ]; then
-            echo "已取消。"
+            echo "Cancelled."
             exit 0
         fi
         echo ""
@@ -580,19 +580,19 @@ main_undeploy() {
 
     verify_ssh_connection
     run_remote_make "undeploy"
-    print_completion "销毁"
+    print_completion "destroy"
 }
 
 # ============================================================================
-# 辅助函数
+# Helper functions
 # ============================================================================
 
 load_environment() {
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
     if [ ! -f "$SCRIPT_DIR/.env" ]; then
-        echo "错误: 未找到 .env 文件: $SCRIPT_DIR/.env"
-        echo "      将 .env.example 复制为 .env 并填写配置值"
+        echo "Error: .env file not found: $SCRIPT_DIR/.env"
+        echo "      Copy .env.example to .env and fill in the values"
         exit 1
     fi
     source "$SCRIPT_DIR/.env"
@@ -605,13 +605,13 @@ load_environment() {
     [ -z "$LOCAL_PROJECT_DIR" ]    && missing="$missing LOCAL_PROJECT_DIR"
 
     if [ -n "$missing" ]; then
-        echo "错误: 缺少必填 .env 变量:$missing"
+        echo "Error: missing required .env variables:$missing"
         exit 1
     fi
 
-    echo "环境已加载"
-    echo "  SSH 目标 : $SSH_USER@$SSH_HOST"
-    echo "  远程目录 : $REMOTE_PROJECT_DIR"
+    echo "Environment loaded"
+    echo "  SSH target : $SSH_USER@$SSH_HOST"
+    echo "  Remote dir : $REMOTE_PROJECT_DIR"
 }
 
 print_banner() {
@@ -620,23 +620,23 @@ print_banner() {
     echo "=========================================="
     echo "  $title"
     echo "=========================================="
-    echo "  目标 : $SSH_USER@$SSH_HOST"
-    echo "  路径 : $REMOTE_PROJECT_DIR"
-    echo "  时间 : $(date)"
+    echo "  Target : $SSH_USER@$SSH_HOST"
+    echo "  Path   : $REMOTE_PROJECT_DIR"
+    echo "  Time   : $(date)"
     echo "=========================================="
     echo ""
 }
 
 verify_ssh_connection() {
-    echo "第 1 步: 验证 SSH 连接..."
+    echo "Step 1: Verifying SSH connection..."
     if ! ssh -i "$SSH_KEY" -o ConnectTimeout=10 -o BatchMode=yes \
             "$SSH_USER@$SSH_HOST" "echo ok" >/dev/null 2>&1; then
-        echo "错误: SSH 连接失败"
-        echo "  密钥 : $SSH_KEY"
-        echo "  主机 : $SSH_USER@$SSH_HOST"
+        echo "Error: SSH connection failed"
+        echo "  Key  : $SSH_KEY"
+        echo "  Host : $SSH_USER@$SSH_HOST"
         exit 1
     fi
-    echo "SSH 连接正常"
+    echo "SSH connection OK"
 }
 
 is_first_deploy() {
@@ -652,7 +652,7 @@ upload_package() {
 
 create_package() {
     local mode="$1"
-    echo "第 2 步: 创建打包文件 (mode=$mode)..."
+    echo "Step 2: Creating package (mode=$mode)..."
 
     TEMP_DIR=$(mktemp -d)
     PACKAGE_NAME="match3-wiki-$(date +%Y%m%d-%H%M%S).tar.gz"
@@ -660,54 +660,54 @@ create_package() {
 
     cd "$LOCAL_PROJECT_DIR"
 
-    # 构建排除参数
+    # Build exclude arguments
     local exclude_args=""
 
-    # 始终排除后端构建产物
+    # Always exclude backend build artifacts
     for item in $BACKEND_EXCLUDE; do
         exclude_args="$exclude_args --exclude='./$item' --exclude='*/$item'"
     done
 
-    # 仅前端部署时，排除前端构建产物
+    # For frontend-only deploys, also exclude frontend build artifacts
     if [ "$mode" = "frontend" ]; then
         for item in $FRONTEND_EXCLUDE; do
             exclude_args="$exclude_args --exclude='./$item'"
         done
     fi
 
-    # 后续部署时：排除 .env（远程保留，永不覆盖）
+    # Subsequent deploys: exclude .env (preserved on remote, never overwritten)
     if [ "$IS_FIRST_DEPLOY" = false ]; then
         for item in $REMOTE_PRESERVE; do
             exclude_args="$exclude_args --exclude='./$item'"
         done
     fi
 
-    # 创建 tar 包 — --no-xattrs 防止 macOS xattr 警告
-    # --exclude='._*' 防止 AppleDouble 文件污染远程
+    # Create tar archive — --no-xattrs prevents macOS xattr warnings
+    # --exclude='._*' prevents AppleDouble files from polluting the remote
     eval tar --no-xattrs --exclude='._*' $exclude_args -czf "$PACKAGE_PATH" .
 
-    echo "打包完成: $PACKAGE_PATH ($(du -h "$PACKAGE_PATH" | cut -f1))"
+    echo "Package ready: $PACKAGE_PATH ($(du -h "$PACKAGE_PATH" | cut -f1))"
 }
 
 push_package() {
-    echo "第 3 步: 上传打包文件..."
+    echo "Step 3: Uploading package..."
 
     ssh -i "$SSH_KEY" "$SSH_USER@$SSH_HOST" "mkdir -p '$REMOTE_PROJECT_DIR'"
     if ! scp -i "$SSH_KEY" "$PACKAGE_PATH" "$SSH_USER@$SSH_HOST:$REMOTE_PROJECT_DIR/"; then
-        echo "错误: scp 上传失败"
+        echo "Error: scp upload failed"
         rm -rf "$TEMP_DIR"
         exit 1
     fi
 
-    echo "上传完成"
+    echo "Upload complete"
 }
 
 extract_on_remote() {
-    echo "第 4 步: 在远程解压..."
+    echo "Step 4: Extracting on remote..."
 
-    # 后续部署时：覆盖文件前先停止服务
+    # Subsequent deploys: stop services before overwriting files
     if [ "$IS_FIRST_DEPLOY" = false ]; then
-        echo "停止运行中的服务..."
+        echo "Stopping running services..."
         ssh -i "$SSH_KEY" "$SSH_USER@$SSH_HOST" "
             cd '$REMOTE_PROJECT_DIR' 2>/dev/null || exit 0
             if [ -f Makefile ]; then
@@ -716,7 +716,7 @@ extract_on_remote() {
         "
     fi
 
-    # 解压（覆盖所有内容，保留项已在打包时排除）
+    # Extract (overwrite everything; preserved files were excluded from the package)
     ssh -i "$SSH_KEY" "$SSH_USER@$SSH_HOST" "
         cd '$REMOTE_PROJECT_DIR'
         tar -xzf '$PACKAGE_NAME'
@@ -724,12 +724,12 @@ extract_on_remote() {
     "
 
     rm -rf "$TEMP_DIR"
-    echo "解压完成"
+    echo "Extraction complete"
 }
 
 run_remote_make() {
     local target="$1"
-    echo "执行: $SSH_USER@$SSH_HOST 上的 make $target..."
+    echo "Running: make $target on $SSH_USER@$SSH_HOST..."
 
     ssh -i "$SSH_KEY" \
         -o ConnectTimeout=60 \
@@ -740,38 +740,38 @@ run_remote_make() {
         cd '$REMOTE_PROJECT_DIR'
         make $target
     " || {
-        echo "错误: 远程 make $target 失败"
+        echo "Error: remote make $target failed"
         exit 1
     }
 
-    echo "make $target 已完成"
+    echo "make $target completed"
 }
 
 print_completion() {
     local op="$1"
     echo ""
     echo "=========================================="
-    echo "  $op 完成"
+    echo "  $op complete"
     echo "=========================================="
-    echo "  时间: $(date)"
+    echo "  Time: $(date)"
     echo ""
 }
 
 display_service_info() {
-    echo "服务地址:"
-    [ -n "$BACKEND_URL" ]  && echo "  API    : $BACKEND_URL/docs"
-    [ -n "$FRONTEND_URL" ] && echo "  应用   : $FRONTEND_URL"
+    echo "Service URLs:"
+    [ -n "$BACKEND_URL" ]  && echo "  API : $BACKEND_URL/docs"
+    [ -n "$FRONTEND_URL" ] && echo "  App : $FRONTEND_URL"
     echo ""
-    echo "常用命令:"
-    echo "  $0 --run status           # 查看容器状态"
-    echo "  $0 --run logs-backend     # 追踪 API 日志"
-    echo "  $0 --run logs-workers     # 追踪 Worker 日志"
+    echo "Common commands:"
+    echo "  $0 --run status           # check container status"
+    echo "  $0 --run logs-backend     # tail API logs"
+    echo "  $0 --run logs-workers     # tail worker logs"
     echo "  ssh -i $SSH_KEY $SSH_USER@$SSH_HOST"
     echo ""
 }
 
 # ============================================================================
-# 参数解析
+# Argument parser
 # ============================================================================
 
 ACTION=""
@@ -806,31 +806,31 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             show_help; exit 0 ;;
         *)
-            echo "未知选项: $1"
-            echo "使用 '$0 --help' 查看帮助"
+            echo "Unknown option: $1"
+            echo "Run '$0 --help' for usage"
             exit 1 ;;
     esac
 done
 
-# 校验 --light 用法
+# Validate --light usage
 if [ "$ARG_LIGHT" = true ] && [[ "$ACTION" != "deploy-frontend" && "$ACTION" != "deploy-all" ]]; then
-    echo "错误: --light 只能与 --deploy-frontend 或 --deploy-all 配合使用"
+    echo "Error: --light can only be used with --deploy-frontend or --deploy-all"
     exit 1
 fi
 
 if [[ -z "$ACTION" ]]; then
-    echo "错误: 未指定操作"
-    echo "使用 '$0 --help' 查看帮助"
+    echo "Error: no action specified"
+    echo "Run '$0 --help' for usage"
     exit 1
 fi
 
 if [[ "$ACTION" == "run" && -z "$RUN_TARGET" ]]; then
-    echo "错误: --run 需要指定 make 目标"
-    echo "  示例: $0 --run status"
+    echo "Error: --run requires a make target"
+    echo "  Example: $0 --run status"
     exit 1
 fi
 
-# 分发
+# Dispatch
 case $ACTION in
     deploy-backend)  main_deploy "backend" ;;
     deploy-frontend) main_deploy "frontend" ;;
@@ -838,47 +838,47 @@ case $ACTION in
     run)             main_run "$RUN_TARGET" ;;
     undeploy)        main_undeploy ;;
     *)
-        echo "错误: 无效操作: $ACTION"; exit 1 ;;
+        echo "Error: invalid action: $ACTION"; exit 1 ;;
 esac
 ```
 
 ### 5.4 首次部署流程
 
 ```bash
-# 1. 复制并填写 tools/.env
+# 1. Copy and fill in tools/.env
 cp tools/.env.example tools/.env
-# 编辑 tools/.env：填写 SSH_KEY、SSH_USER、SSH_HOST、REMOTE_PROJECT_DIR、LOCAL_PROJECT_DIR
+# Edit tools/.env: fill in SSH_KEY, SSH_USER, SSH_HOST, REMOTE_PROJECT_DIR, LOCAL_PROJECT_DIR
 
-# 2. 确保远程服务器上已有含生产密钥的 .env
-#    将 .env.example 复制到服务器 /opt/match3-wiki/.env 并填写密钥
-#    （仅需手动操作一次 — remote.sh 永远不会覆盖 .env）
+# 2. Ensure the remote server already has a .env with production secrets
+#    Copy .env.example to /opt/match3-wiki/.env on the server and fill in the secrets
+#    (one-time manual step — remote.sh will never overwrite .env)
 
-# 3. 首次全量部署（基础设施 + 迁移 + 后端 + 前端）
+# 3. First-time full deploy (infrastructure + migration + backend + frontend)
 ./tools/remote.sh --deploy-all
 ```
 
 ### 5.5 日常更新流程
 
 ```bash
-# 仅更新后端（重建 API + Workers）
+# Update backend only (rebuild API + Workers)
 ./tools/remote.sh --deploy-backend
 
-# 仅更新前端（重建 Nginx + Next.js）
+# Update frontend only (rebuild Nginx + Next.js)
 ./tools/remote.sh --deploy-frontend
 
-# 轻量前端更新（仅上传源码，不重启容器）
+# Lightweight frontend update (upload source only, no container restart)
 ./tools/remote.sh --deploy-frontend --light
 
-# 仅执行 DB 迁移
+# Run DB migration only
 ./tools/remote.sh --run migrate
 
-# 查看服务状态
+# Check service status
 ./tools/remote.sh --run status
 
-# 追踪 API 日志
+# Tail API logs
 ./tools/remote.sh --run logs-backend
 
-# 重启后端容器（不重建）
+# Restart backend containers (no rebuild)
 ./tools/remote.sh --run restart-backend
 ```
 
@@ -902,7 +902,7 @@ server {
     ssl_certificate_key /etc/ssl/match3/privkey.pem;
     ssl_protocols       TLSv1.2 TLSv1.3;
 
-    # SSE 流式传输 — 禁用缓冲
+    # SSE streaming — disable buffering
     location /api/v1/qa/ask {
         proxy_pass          http://api:8000;
         proxy_http_version  1.1;
@@ -919,7 +919,7 @@ server {
         proxy_set_header    X-Real-IP $remote_addr;
         proxy_set_header    X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header    X-Forwarded-Proto $scheme;
-        client_max_body_size 500M;   # 允许上传大文件
+        client_max_body_size 500M;   # allow large file uploads
         proxy_read_timeout  120s;
     }
 }
@@ -932,28 +932,28 @@ server {
 以下命令直接在服务器上执行（SSH 登录后），或通过 `./tools/remote.sh --run <target>` 远程触发。
 
 ```bash
-# 查看所有服务状态
+# Check status of all services
 make status
-# 等效: docker compose -f docker-compose.prod.yml ps
+# Equivalent: docker compose -f docker-compose.prod.yml ps
 
-# 追踪 API 日志
+# Tail API logs
 make logs-backend
-# 等效: docker compose -f docker-compose.prod.yml logs api --tail=100 -f
+# Equivalent: docker compose -f docker-compose.prod.yml logs api --tail=100 -f
 
-# 查看 Worker 失败记录
+# View worker failure records
 docker compose -f docker-compose.prod.yml logs worker-ingest | grep '"event":"task_failure"' | tail -20
 
-# 手动执行 DB 迁移
+# Run DB migration manually
 make migrate
-# 等效: docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
+# Equivalent: docker compose -f docker-compose.prod.yml run --rm api alembic upgrade head
 
-# 重启单个服务（不重建）
+# Restart a single service (no rebuild)
 docker compose -f docker-compose.prod.yml restart api
 
-# 备份 PostgreSQL
+# Back up PostgreSQL
 docker compose -f docker-compose.prod.yml exec postgres \
   pg_dump -U match3 match3 | gzip > /data/backups/match3-$(date +%Y%m%d).sql.gz
 
-# 清理旧 Docker 镜像（释放磁盘空间）
+# Clean up old Docker images (free disk space)
 docker image prune -f --filter "until=720h"
 ```

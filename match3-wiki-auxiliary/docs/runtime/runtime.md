@@ -4,7 +4,7 @@ Runtime 是 Match3 Wiki 的基础设施抽象层，采用 **Protocol-based Archi
 
 > 相关文档：
 > - [config.md](./config.md) — `config.yaml` 与 `.env` 的完整字段列表
-> - [directory.md](./directory.md) — `backend/runtime/` 与 `backend/runtime_impl/` 的代码目录结构
+> - [directory.md](./directory.md) — `app/runtime/` 与 `app/runtime_impl/` 的代码目录结构
 > - 各组件的 `protocol.md` 与 `implementation.md`（见下表）
 > - 报错规范：[`../design/solution-final/090-error/error-design.md`](../design/solution-final/090-error/error-design.md)
 
@@ -25,10 +25,10 @@ Runtime 是 Match3 Wiki 的基础设施抽象层，采用 **Protocol-based Archi
 业务层 (api / services / rag / workers)
     │ 依赖
     ▼
-Protocol 层 (backend/runtime/protocols/)
+Protocol 层 (app/runtime/protocols/)
     ▲ 实现
     │
-实现层 (backend/runtime_impl/implements/)
+实现层 (app/runtime_impl/implements/)
 ```
 
 约束：
@@ -43,18 +43,18 @@ Protocol 层 (backend/runtime/protocols/)
 `Match3Runtime` 是 `frozen dataclass`，字段全部为 Protocol 类型：
 
 ```python
-# backend/runtime/runtime.py
+# app/runtime/runtime.py
 from dataclasses import dataclass
-from backend.config import Config
-from backend.env import Env
-from backend.runtime.protocols.logger.logger import Logger
-from backend.runtime.protocols.cache_store.cache_store import CacheStore
-from backend.runtime.protocols.message_queue.message_queue import MessageQueue
-from backend.runtime.protocols.vector_db.vector_db import VectorDatabase
-from backend.runtime.protocols.graph_db.graph_db import GraphDatabase
-from backend.runtime.protocols.database.database_engine import DatabaseEngine
-from backend.runtime.protocols.fulltext_search.fulltext_search import FullTextSearch
-from backend.runtime.protocols.object_storage.object_storage import ObjectStorage
+from app.config.config import Config
+from app.config.env import Env
+from app.runtime.protocols.logger.logger import Logger
+from app.runtime.protocols.cache_store.cache_store import CacheStore
+from app.runtime.protocols.message_queue.message_queue import MessageQueue
+from app.runtime.protocols.vector_db.vector_db import VectorDatabase
+from app.runtime.protocols.graph_db.graph_db import GraphDatabase
+from app.runtime.protocols.database.database_engine import DatabaseEngine
+from app.runtime.protocols.fulltext_search.fulltext_search import FullTextSearch
+from app.runtime.protocols.object_storage.object_storage import ObjectStorage
 
 @dataclass(frozen=True)
 class Match3Runtime:
@@ -112,19 +112,19 @@ class Match3Runtime:
 ### build_runtime()
 
 ```python
-# backend/runtime_impl/runtime.py
-from backend.runtime.runtime import Match3Runtime
-from backend.config import Config
-from backend.env import Env
-from backend.runtime.protocols.logger.logger import Logger
+# app/runtime_impl/runtime.py
+from app.runtime.runtime import Match3Runtime
+from app.config.config import Config
+from app.config.env import Env
+from app.runtime.protocols.logger.logger import Logger
 
-from backend.runtime_impl.implements.cache_store.cache_store import create_cache_store
-from backend.runtime_impl.implements.message_queue.message_queue import create_message_queue
-from backend.runtime_impl.implements.vector_db.vector_db import create_vector_database
-from backend.runtime_impl.implements.graph_db.graph_db import create_graph_database
-from backend.runtime_impl.implements.database.database import create_database_engine
-from backend.runtime_impl.implements.fulltext_search.fulltext_search import create_fulltext_search
-from backend.runtime_impl.implements.object_storage.object_storage import create_object_storage
+from app.runtime_impl.implements.cache_store.cache_store import create_cache_store
+from app.runtime_impl.implements.message_queue.message_queue import create_message_queue
+from app.runtime_impl.implements.vector_db.vector_db import create_vector_database
+from app.runtime_impl.implements.graph_db.graph_db import create_graph_database
+from app.runtime_impl.implements.database.database import create_database_engine
+from app.runtime_impl.implements.fulltext_search.fulltext_search import create_fulltext_search
+from app.runtime_impl.implements.object_storage.object_storage import create_object_storage
 
 def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
     logger.info("Building runtime")
@@ -145,15 +145,15 @@ def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
 ### 应用启动流程
 
 ```python
-# backend/app/main.py
-from backend.config import load_config
-from backend.env import load_env
-from backend.runtime_impl.implements.logger.logger import create_logger
-from backend.runtime_impl.runtime import build_runtime
+# app/cli/api.py（启动 API 服务时执行）
+from app.config.config import Config
+from app.config.env import Env
+from app.runtime_impl.implements.logger.logger import create_logger
+from app.runtime_impl.runtime import build_runtime
 
-config = load_config("config.yaml")      # 严格校验，缺字段直接抛 Match3Exception
-env = load_env()                          # 加载 .env，缺必填项直接抛 Match3Exception
-logger = create_logger(config)           # Logger 在 Runtime 之外创建
+config = Config.load_from_yaml("config.yaml")   # 严格校验，缺字段直接抛 Match3Exception
+env = Env()                                       # 加载 .env，缺必填项直接抛 Match3Exception
+logger = create_logger(config)                   # Logger 在 Runtime 之外创建
 runtime = build_runtime(config, env, logger)
 ```
 
@@ -166,7 +166,7 @@ runtime = build_runtime(config, env, logger)
 `typing.Protocol` 声明抽象接口，零外部依赖；一个类一个文件（详见 [directory.md](./directory.md)）。示例：
 
 ```python
-# backend/runtime/protocols/cache_store/cache_store.py
+# app/runtime/protocols/cache_store/cache_store.py
 from typing import Protocol
 
 class CacheStore(Protocol):
@@ -180,9 +180,9 @@ class CacheStore(Protocol):
 实现 Protocol 接口；一个适配器一个文件；类名格式 `<Provider><Capability>`（如 `RedisCacheStore`、`PostgreSQLEngine`）。
 
 ```python
-# backend/runtime_impl/implements/cache_store/impl_redis/redis_cache_store.py
+# app/runtime_impl/implements/cache_store/impl_redis/redis_cache_store.py
 from redis.asyncio import Redis
-from backend.runtime.protocols.cache_store.cache_store import CacheStore
+from app.runtime.protocols.cache_store.cache_store import CacheStore
 
 class RedisCacheStore:
     """Redis implementation of CacheStore protocol"""

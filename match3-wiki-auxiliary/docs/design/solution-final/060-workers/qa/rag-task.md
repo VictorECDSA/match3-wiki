@@ -27,10 +27,10 @@
 launch_multi_agent_chord(query, workspace_id, domains)
   │
   ├─ domain_agent_task("entities", query, workspace_id)  ─┐
-  ├─ domain_agent_task("market",   query, workspace_id)  ─┤  并行
+  ├─ domain_agent_task("market",   query, workspace_id)  ─┤  parallel
   ├─ domain_agent_task("mechanics",query, workspace_id)  ─┤
   └─ domain_agent_task("growth",   query, workspace_id)  ─┘
-                                                          │  所有完成后
+                                                          │  after all complete
                                             multi_agent_verify_task(
                                               domain_results, query, workspace_id
                                             )
@@ -68,7 +68,7 @@ launch_multi_agent_chord(query, workspace_id, domains)
 
 ```python
 task_id = launch_multi_agent_chord(
-    query="Royal Match 的核心留存机制是什么？",
+    query="What are the core retention mechanics of Royal Match?",
     workspace_id="ws_abc123",
     domains=["entities", "market", "mechanics", "growth"],
 )
@@ -83,15 +83,22 @@ task_id = launch_multi_agent_chord(
 
 ```python
 @celery_app.task(name="…domain_agent_task", bind=True, max_retries=2, time_limit=60)
-def domain_agent_task(self, domain: str, query: str, workspace_id: str) -> dict:
-    answer = _run_domain_agent(rt, domain, query, workspace_id)
-    return {"domain": domain, "answer": answer}
+def domain_agent_task(self, domain: str, question: str, workspace_id: str) -> dict:
+    from app.intelligence.llm import OpenAILLMCaller
+    from app.rag.multi_agent import _run_domain_agent
+    llm = OpenAILLMCaller(api_key=rt.env.OPENAI_API_KEY, model=rt.config.llm.default_model)
+    answer = _run_domain_agent(rt, llm, workspace_id, domain, question)
+    return {"agent": domain, "question": question, "answer": answer}
 
 
 @celery_app.task(name="…multi_agent_verify_task", bind=True, max_retries=1, time_limit=120)
-def multi_agent_verify_task(self, domain_results: list[dict], query: str, workspace_id: str) -> str:
-    # domain_results is auto-injected by Celery chord as first argument
-    return _verify_answers(rt, domain_results, query)
+def multi_agent_verify_task(self, agent_answers: list[dict], query: str, workspace_id: str) -> str:
+    # agent_answers is auto-injected by Celery chord as first argument
+    from app.intelligence.llm import OpenAILLMCaller
+    from app.rag.multi_agent import _verify_answers, _write_answer
+    llm = OpenAILLMCaller(api_key=rt.env.OPENAI_API_KEY, model=rt.config.llm.default_model)
+    verified = _verify_answers(llm, query, agent_answers)
+    return "".join(_write_answer(llm, query, verified))  # non-streaming for background task
 
 
 def launch_multi_agent_chord(query, workspace_id, domains=("entities","market","mechanics","growth")) -> str:

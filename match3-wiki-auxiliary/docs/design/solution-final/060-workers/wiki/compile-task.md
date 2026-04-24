@@ -37,18 +37,18 @@
 ## 状态机流转
 
 ```
-(无记录 / PUBLISHED / FAILED)
-  │  compile_topic 触发
+(no record / PUBLISHED / FAILED)
+  │  compile_topic triggered
   ▼
-QUEUED  ← API 层写入，任务入队时
-  │  Worker 开始执行
+QUEUED  ← written by API layer when task is enqueued
+  │  worker starts executing
   ▼
 COMPILING
-  │  run_compile_pipeline 返回
+  │  run_compile_pipeline returns
   ▼
-PUBLISHED  ← 前端可读取
+PUBLISHED  ← readable by frontend
   │
-  │  任何异常（含超过 max_retries）
+  │  any exception (including max_retries exceeded)
   ▼
 FAILED
 ```
@@ -74,7 +74,7 @@ FAILED
 @celery_app.task(name="…compile_topic", bind=True, max_retries=2, default_retry_delay=30,
                  time_limit=300, soft_time_limit=270)
 def compile_topic(self, topic: str, workspace_id: str) -> str:
-    wiki_repo = WikiPageRepository(rt.db_engine)
+    wiki_repo = WikiPageRepository(rt.db)
 
     # upsert: create new or reuse existing WikiPage row, set status=COMPILING
     page = wiki_repo.find_by_topic(topic, workspace_id)

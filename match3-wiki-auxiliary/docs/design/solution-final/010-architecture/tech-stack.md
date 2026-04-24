@@ -9,14 +9,15 @@
 | UI 组件库 | shadcn/ui | Latest | Radix UI + Tailwind，无运行时依赖，主题可完全自定义 |
 | 多语言（i18n） | next-intl | 3.x | App Router 原生支持，服务端/客户端共享翻译，按路由加载 |
 | 通知提示（Toast） | sonner | Latest | 轻量、无障碍、队列管理，开箱即用的自动消失动画 |
-| 关系型数据库 | PostgreSQL | 16 | ACID、JSONB、全文搜索兜底 |
-| ORM | SQLAlchemy | 2.x（Core + ORM） | 成熟稳定、类型安全、Alembic 迁移 |
-| 向量数据库 | Milvus | 2.4+ | 十亿级 ANN、GPU 加速、IVF_FLAT + HNSW |
-| 关键词搜索 | Elasticsearch | 8.x | BM25、通过 RRF 实现混合搜索、经大规模验证 |
-| 图数据库 | Neo4j | 5.x | Cypher 查询、Leiden 社区检测、原生图结构 |
+| 关系型数据库 | PostgreSQL | 18 | ACID、JSONB、全文搜索兜底 |
+| ORM | SQLAlchemy | 2.0.48（Core + ORM） | 成熟稳定、类型安全、Alembic 迁移 |
+| 向量数据库 | Milvus | 2.6.14 | 十亿级 ANN、GPU 加速、IVF_FLAT + HNSW |
+| 关键词搜索 | Elasticsearch | 9.3.3 | BM25、通过 RRF 实现混合搜索、经大规模验证 |
+| 图数据库 | Neo4j | 2026.03.1 | Cypher 查询、Leiden 社区检测、原生图结构 |
 | 任务队列 | Celery | 5.x | 成熟稳定、Redis broker、重试 + ETA、canvas |
-| 消息中间件 | Redis | 7.x | Pub/sub、任务队列、会话缓存 |
-| 对象存储 | MinIO | Latest | S3 兼容、自托管、分片上传 |
+| 消息中间件 | Redis | 8.6.2 | Pub/sub、任务队列、会话缓存 |
+| 对象存储 | MinIO | RELEASE.2025-10-15 | S3 兼容、自托管、分片上传 |
+| 结构化日志 | Loguru | 0.7.3 | 零配置、结构化输出、异步安全 |
 | 文本嵌入 | OpenAI text-embedding-3-small | — | 1536 维，语义质量强 |
 | 图片嵌入 | CLIP ViT-L/14 | — | 768 维，零样本图文对齐 |
 | LLM | GPT-4o / Claude-opus-4-5 | — | 按任务类型可配置 |
@@ -49,7 +50,7 @@ engine = create_engine(
     f"@{env.POSTGRES_HOST}:{env.POSTGRES_PORT}/{env.POSTGRES_DB}",
     pool_size=config.database.pool_size,
     max_overflow=config.database.max_overflow,
-    pool_pre_ping=True,   # 检测失效连接
+    pool_pre_ping=True,   # detect stale connections
     pool_recycle=config.database.pool_recycle,
 )
 ```
@@ -124,7 +125,7 @@ from app.common.constants import constants
 @celery_app.task(
     bind=True,
     max_retries=3,
-    default_retry_delay=60,   # 1 分钟
+    default_retry_delay=60,   # 1 minute
     queue=constants.QUEUE_INGEST,
 )
 def ingest_task(self, raw_file_id: str) -> None:
@@ -142,14 +143,14 @@ from pageindex import IndexConfig, PageIndexClient
 
 client = PageIndexClient(api_key=os.environ["PAGEINDEX_API_KEY"])
 
-# 上传文档
-doc_id = client.add(pdf_path)  # 返回 doc_id 字符串
+# Upload document
+doc_id = client.add(pdf_path)  # returns doc_id string
 
-# 获取层级目录树
+# Fetch hierarchical table-of-contents tree
 tree = client.get_tree(doc_id)
-# tree 为嵌套字典：{ title, page_range, children: [...] }
+# tree is a nested dict: { title, page_range, children: [...] }
 
-# 获取指定页面
+# Fetch specific pages
 content = client.get_page_content(doc_id, pages=[7, 8, 9])
 ```
 
@@ -189,7 +190,7 @@ def embed_image(image_path: str) -> list[float]:
     image = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
     with torch.no_grad():
         embedding = model.encode_image(image)
-    embedding = embedding / embedding.norm(dim=-1, keepdim=True)  # 归一化
+    embedding = embedding / embedding.norm(dim=-1, keepdim=True)  # normalize
     return embedding.squeeze().tolist()
 
 def embed_text_for_image_search(text: str) -> list[float]:

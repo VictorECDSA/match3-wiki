@@ -4,27 +4,27 @@
 
 ```mermaid
 sequenceDiagram
-    participant 客户端 as 客户端<br/>(Next.js)
-    participant API as API 层<br/>(FastAPI /ingest)
+    participant Client as Client<br/>(Next.js)
+    participant API as API Layer<br/>(FastAPI /ingest)
     participant SVC as IngestService
-    participant MinIO as 对象存储<br/>(MinIO)
-    participant PG as 关系数据库<br/>(PostgreSQL)
-    participant Redis as 消息队列<br/>(Redis / Celery)
+    participant MinIO as Object Storage<br/>(MinIO)
+    participant PG as Relational DB<br/>(PostgreSQL)
+    participant Redis as Message Queue<br/>(Redis / Celery)
     participant Worker as Worker<br/>(ingest_task)
     participant EmbedWorker as Worker<br/>(embed_task)
     participant GraphWorker as Worker<br/>(graph_task)
-    participant LLM as 智能层<br/>(LLM / Embedder)
-    participant Milvus as 向量库<br/>(Milvus)
-    participant ES as 全文索引<br/>(Elasticsearch)
-    participant Neo4j as 图数据库<br/>(Neo4j)
+    participant LLM as Intelligence Layer<br/>(locally instantiated)
+    participant Milvus as Vector Store<br/>(Milvus)
+    participant ES as Full-text Index<br/>(Elasticsearch)
+    participant Neo4j as Graph DB<br/>(Neo4j)
     participant PageIndex as PageIndex API<br/>(VectifyAI)
 
-    客户端->>API: POST /api/v1/ingest/upload<br/>(file, workspace_id)
+    Client->>API: POST /api/v1/ingest/upload<br/>(file, workspace_id)
     activate API
     API->>SVC: ingest(file, workspace_id)
     activate SVC
 
-    Note over SVC,MinIO: 阶段 1 — 同步：持久化原始文件
+    Note over SVC,MinIO: Phase 1 — sync: persist raw file
     SVC->>MinIO: put_object(raw_key, bytes)
     MinIO-->>SVC: object_url
 
@@ -36,10 +36,10 @@ sequenceDiagram
 
     SVC-->>API: {task_id, raw_file_id}
     deactivate SVC
-    API-->>客户端: ApiResp{code=100000, data={task_id}}
+    API-->>Client: ApiResp{code=100000, data={task_id}}
     deactivate API
 
-    Note over Redis,Worker: 阶段 2 — 异步：解析 & 分块（Queue: ingest）
+    Note over Redis,Worker: Phase 2 — async: parse & chunk (Queue: ingest)
     Redis->>Worker: dispatch ingest_task
     activate Worker
 
@@ -47,27 +47,27 @@ sequenceDiagram
     Worker->>MinIO: get_object(raw_key) → bytes
 
     alt file_type == pdf
-        Worker->>Worker: markitdown 解析 → 文本 + 图片页
-        Note over Worker,PageIndex: 若 page_count ≥ 20，额外注册 PageIndex（不影响分块结果）
-        opt page_count ≥ 20
+        Worker->>Worker: markitdown parse → text + image pages
+        Note over Worker,PageIndex: if page_count >= 20, also register PageIndex (does not affect chunking)
+        opt page_count >= 20
             Worker->>PageIndex: add(pdf_path) → doc_id
             PageIndex-->>Worker: doc_id
             Worker->>PageIndex: get_tree(doc_id) → tree
-            PageIndex-->>Worker: 层级目录树
+            PageIndex-->>Worker: hierarchical tree
             Worker->>PG: update RawFile(pageindex_doc_id, pageindex_tree)
         end
     else file_type == image
         Worker->>LLM: vision describe(image) → caption
-        LLM-->>Worker: 图片描述文本
+        LLM-->>Worker: image caption text
     else file_type == video/audio
         Worker->>LLM: Whisper transcribe(audio_path) → transcript
-        LLM-->>Worker: 转写文本
+        LLM-->>Worker: transcript text
     else file_type == html/csv/markdown
-        Worker->>Worker: 文本提取 → 规则分块
+        Worker->>Worker: text extraction → rule-based chunking
     end
 
-    Worker->>Worker: 语义分块（semantic_chunk）
-    loop 每个文本块
+    Worker->>Worker: semantic chunking (semantic_chunk)
+    loop for each text chunk
         Worker->>PG: insert TextChunk<br/>(id, raw_file_id, content, chunk_type, position)
     end
 
@@ -75,21 +75,21 @@ sequenceDiagram
     Worker->>Redis: enqueue embed_task(chunk_ids)
     deactivate Worker
 
-    Note over Redis,EmbedWorker: 阶段 3 — 异步：向量化（Queue: embed）
+    Note over Redis,EmbedWorker: Phase 3 — async: vectorize (Queue: embed)
     Redis->>EmbedWorker: dispatch embed_task
     activate EmbedWorker
 
     EmbedWorker->>PG: find TextChunks by chunk_ids
     PG-->>EmbedWorker: chunk list
 
-    par 文本 dense + sparse 向量
+    par text dense + sparse vectors
         EmbedWorker->>LLM: embed_both(texts) → (dense[], sparse[])
-        LLM-->>EmbedWorker: 向量数组
+        LLM-->>EmbedWorker: vector arrays
         EmbedWorker->>Milvus: insert match3_chunks<br/>(id, dense_vector, sparse_vector,<br/>workspace_id, raw_file_id, chunk_type)
         EmbedWorker->>ES: index text_chunks<br/>(id, content, workspace_id, raw_file_id)
-    and 图片块 CLIP 向量（仅 image_type 块）
+    and image chunk CLIP vector (image_type chunks only)
         EmbedWorker->>LLM: image_embedder.embed_image(path) → vec[768]
-        LLM-->>EmbedWorker: CLIP 向量
+        LLM-->>EmbedWorker: CLIP vector
         EmbedWorker->>Milvus: insert image_chunks<br/>(id, dense_vector[768], workspace_id, image_path, description)
     end
 
@@ -97,12 +97,12 @@ sequenceDiagram
     EmbedWorker->>Redis: enqueue graph_task(raw_file_id)
     deactivate EmbedWorker
 
-    Note over Redis,GraphWorker: 阶段 4 — 异步：知识图谱抽取（Queue: graph）
+    Note over Redis,GraphWorker: Phase 4 — async: knowledge graph extraction (Queue: graph)
     Redis->>GraphWorker: dispatch graph_task
     activate GraphWorker
 
     GraphWorker->>PG: find TextChunks by raw_file_id
-    loop 每个文本块
+    loop for each text chunk
         GraphWorker->>LLM: extract_entities_relations(content)
         LLM-->>GraphWorker: [(entity, relation, entity), ...]
         GraphWorker->>Neo4j: MERGE Entity nodes<br/>CREATE RELATIONSHIP
@@ -132,10 +132,10 @@ sequenceDiagram
 | 14 | Worker → Redis | 将 `embed_task(chunk_ids)` 压入 `embed` 队列，触发下一阶段。 |
 | 15 | Redis → embed_task Worker | Celery Worker 从 `embed` 队列取出任务，进入向量化阶段。 |
 | 16 | EmbedWorker → PostgreSQL | 批量读取指定 chunk_ids 的 `TextChunk`，准备批量向量化。 |
-| 17 | EmbedWorker → LLM（文本向量，并行） | 调用 `rt.embedder.embed_both(texts)` 同时生成 dense 向量（text-embedding-3-small, dim=1536）和 sparse 向量（BM42）。 |
+| 17 | EmbedWorker → LLM（文本向量，并行） | 调用本地实例化的 `Embedder.embed_both(texts)` 同时生成 dense 向量（text-embedding-3-small, dim=1536）和 sparse 向量（BM42）。 |
 | 18 | EmbedWorker → Milvus（文本） | 将文本块的 dense + sparse 向量批量写入 `match3_chunks` 集合，携带 workspace_id 用于隔离过滤。 |
 | 19 | EmbedWorker → Elasticsearch（文本） | 同步将文本内容写入 ES `text_chunks` 索引，支持 BM25 关键词检索，与向量检索形成互补。 |
-| 20 | EmbedWorker → LLM（图片向量，并行） | 对 `chunk_type=image` 的块，调用 `rt.image_embedder.embed_image(path)` 获取 CLIP 向量（dim=768），支持图文跨模态检索。 |
+| 20 | EmbedWorker → LLM（图片向量，并行） | 对 `chunk_type=image` 的块，调用本地实例化的 `ImageEmbedder.embed_image(path)` 获取 CLIP 向量（dim=768），支持图文跨模态检索。 |
 | 21 | EmbedWorker → Milvus（图片） | 将 CLIP 向量写入 `image_chunks` 集合，携带图片路径和描述文本，供图文混合查询使用。 |
 | 22 | EmbedWorker → Redis | 将 `graph_task(raw_file_id)` 压入 `graph` 队列。 |
 | 23 | Redis → graph_task Worker | Celery Worker 从 `graph` 队列取出任务，进入知识图谱抽取阶段。 |

@@ -5,16 +5,16 @@
 多智能体 RAG 将复杂查询分解为并行工作流，每条流由一个专域智能体负责处理。路由器分发子问题，各智能体独立检索，验证器交叉核查一致性，最终由写作器合成答案。
 
 ```
-用户查询
+User query
     │
     ▼
 ┌──────────────────┐
-│  Router Agent    │  将查询分解为 N 个子问题
-│                  │  将每个子问题分配给对应域智能体
+│  Router Agent    │  Decomposes query into N sub-questions
+│                  │  Assigns each sub-question to the appropriate domain agent
 └────────┬─────────┘
-         │  子问题
+         │  sub-questions
     ┌────▼──────────────────────────────────────────────────┐
-    │  并行域智能体（Celery chord）                          │
+    │  Parallel domain agents (Celery chord)                │
     │                                                       │
     │  ┌──────────────┐  ┌──────────────┐  ┌────────────┐  │
     │  │ EntityAgent  │  │ MarketAgent  │  │ MechAgent  │  │
@@ -23,15 +23,15 @@
     └─────────┼─────────────────┼─────────────────┼────────-┘
               │                 │                 │
               └─────────────────┼─────────────────┘
-                                │  各域局部答案
+                                │  partial answers per domain
                     ┌───────────▼──────────┐
-                    │  Verifier Agent      │  检查事实一致性
-                    │                      │  标记矛盾之处
+                    │  Verifier Agent      │  Check factual consistency
+                    │                      │  Flag contradictions
                     └───────────┬──────────┘
-                                │  已验证答案
+                                │  verified answers
                     ┌───────────▼──────────┐
-                    │  Writer Agent        │  合成最终答案
-                    │                      │  流式输出给用户
+                    │  Writer Agent        │  Synthesize final answer
+                    │                      │  Stream output to user
                     └──────────────────────┘
 ```
 
@@ -44,7 +44,7 @@
 from __future__ import annotations
 import json
 from typing import Generator
-from app.runtime import Match3Runtime
+from app.runtime.runtime import Match3Runtime
 from app.common.exceptions import Match3Exception
 
 
@@ -127,8 +127,11 @@ def multi_agent_rag(
     query: str,
     workspace_id: str,
 ) -> Generator[str, None, None]:
+    from app.intelligence.llm import OpenAILLMCaller
+    llm = OpenAILLMCaller(api_key=rt.env.OPENAI_API_KEY, model=rt.config.llm.default_model)
+
     # Step 1: router decomposes query
-    sub_questions = _route_query(rt, query)
+    sub_questions = _route_query(llm, query)
     if not sub_questions:
         yield "Unable to decompose query for multi-agent processing."
         return
@@ -136,7 +139,7 @@ def multi_agent_rag(
     # Step 2: domain agents answer sub-questions (sequential; see Celery chord section for parallel)
     agent_answers = []
     for sq in sub_questions:
-        answer = _run_domain_agent(rt, workspace_id, sq["agent"], sq["question"])
+        answer = _run_domain_agent(rt, llm, workspace_id, sq["agent"], sq["question"])
         agent_answers.append({
             "agent": sq["agent"],
             "question": sq["question"],
@@ -144,15 +147,15 @@ def multi_agent_rag(
         })
 
     # Step 3: verifier cross-checks answers
-    verified = _verify_answers(rt, query, agent_answers)
+    verified = _verify_answers(llm, query, agent_answers)
 
     # Step 4: writer synthesizes final answer (streaming)
-    yield from _write_answer(rt, query, verified)
+    yield from _write_answer(llm, query, verified)
 
 
-def _route_query(rt: Match3Runtime, query: str) -> list[dict]:
+def _route_query(llm, query: str) -> list[dict]:
     try:
-        resp = rt.llm.complete(
+        resp = llm.complete(
             messages=[{"role": "user", "content": ROUTER_PROMPT.format(query=query)}],
             response_format={"type": "json_object"},
         )
@@ -165,7 +168,7 @@ def _route_query(rt: Match3Runtime, query: str) -> list[dict]:
         raise Match3Exception.of("failed to parse multi-agent router response").ctx(query=query).as_ex(e)
 
 
-def _run_domain_agent(rt: Match3Runtime, workspace_id: str, domain: str, question: str) -> str:
+def _run_domain_agent(rt: Match3Runtime, llm, workspace_id: str, domain: str, question: str) -> str:
     """Run a single domain agent: retrieve with domain filter, then answer sub-question.
 
     Domain → topic_tags prefix mapping:
@@ -198,7 +201,7 @@ def _run_domain_agent(rt: Match3Runtime, workspace_id: str, domain: str, questio
     context = "\n\n".join(f"[Source {i+1}]: {c['content']}" for i, c in enumerate(chunks))
 
     try:
-        return rt.llm.complete(
+        return llm.complete(
             messages=[{"role": "user", "content": DOMAIN_SEARCH_PROMPT.format(
                 domain=domain, question=question, context=context,
             )}],
@@ -209,13 +212,13 @@ def _run_domain_agent(rt: Match3Runtime, workspace_id: str, domain: str, questio
         ).as_ex(e)
 
 
-def _verify_answers(rt: Match3Runtime, query: str, agent_answers: list[dict]) -> dict:
+def _verify_answers(llm, query: str, agent_answers: list[dict]) -> dict:
     answers_text = "\n\n".join(
         f"[{a['agent'].upper()} Agent] Q: {a['question']}\nA: {a['answer']}"
         for a in agent_answers
     )
     try:
-        resp = rt.llm.complete(
+        resp = llm.complete(
             messages=[{"role": "user", "content": VERIFIER_PROMPT.format(
                 query=query, answers=answers_text,
             )}],
@@ -230,11 +233,11 @@ def _verify_answers(rt: Match3Runtime, query: str, agent_answers: list[dict]) ->
         raise Match3Exception.of("failed to parse verifier response").ctx(query=query).as_ex(e)
 
 
-def _write_answer(rt: Match3Runtime, query: str, verified: dict) -> Generator[str, None, None]:
+def _write_answer(llm, query: str, verified: dict) -> Generator[str, None, None]:
     verified_answers_text = json.dumps(verified.get("verified_answers", []), indent=2)
     consistency_summary = verified.get("summary", "")
     try:
-        stream = rt.llm.stream(
+        stream = llm.stream(
             messages=[{"role": "user", "content": WRITER_PROMPT.format(
                 query=query,
                 verified_answers=verified_answers_text,
@@ -284,8 +287,10 @@ from app.common.constants import constants
 )
 def domain_agent_task(self, domain: str, question: str, workspace_id: str) -> dict:
     rt = get_worker_runtime()
+    from app.intelligence.llm import OpenAILLMCaller
     from app.rag.multi_agent import _run_domain_agent
-    answer = _run_domain_agent(rt, workspace_id, domain, question)
+    llm = OpenAILLMCaller(api_key=rt.env.OPENAI_API_KEY, model=rt.config.llm.default_model)
+    answer = _run_domain_agent(rt, llm, workspace_id, domain, question)
     return {"agent": domain, "question": question, "answer": answer}
 
 
@@ -299,10 +304,12 @@ def domain_agent_task(self, domain: str, question: str, workspace_id: str) -> di
 )
 def multi_agent_verify_task(self, agent_answers: list[dict], query: str, workspace_id: str) -> str:
     rt = get_worker_runtime()
+    from app.intelligence.llm import OpenAILLMCaller
     from app.rag.multi_agent import _verify_answers, _write_answer
+    llm = OpenAILLMCaller(api_key=rt.env.OPENAI_API_KEY, model=rt.config.llm.default_model)
 
-    verified = _verify_answers(rt, query, agent_answers)
-    return "".join(_write_answer(rt, query, verified))   # non-streaming for background task
+    verified = _verify_answers(llm, query, agent_answers)
+    return "".join(_write_answer(llm, query, verified))   # non-streaming for background task
 
 
 def run_multi_agent_parallel(rt, query: str, workspace_id: str, sub_questions: list[dict]) -> str:
@@ -328,6 +335,6 @@ def run_multi_agent_parallel(rt, query: str, workspace_id: str, sub_questions: l
 ```
 complexity == "complex"
     │
-    ├── 单域查询 ──► HybridSearchEngine(PROFILE_COMPLEX)  [graph=True]
-    └── 多域查询 ──► multi_agent_rag()                    [每个域独立检索]
+    ├── single-domain query ──► HybridSearchEngine(PROFILE_COMPLEX)  [graph=True]
+    └── multi-domain query  ──► multi_agent_rag()                    [each domain retrieves independently]
 ```

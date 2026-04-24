@@ -34,25 +34,25 @@ from PIL import Image as PILImage
 from app.common.constants import constants
 
 def _parse_image(rt: Match3Runtime, raw_file: RawFile, file_bytes: bytes) -> list[Chunk]:
-    """处理图片：CLIP 嵌入 + Vision 模型描述 → 生成两类 Chunk。"""
+    """Process image: CLIP embedding + Vision model description → produce two Chunk types."""
 
-    # 若图片过大（超过 2048px），则缩放（兼容 CLIP 和 Vision 模型）
+    # resize if largest edge exceeds 2048px (compatible with both CLIP and Vision models)
     img = PILImage.open(io.BytesIO(file_bytes))
     img = _resize_image(img, max_size=2048)
 
-    # 将缩放后的图片转回字节供后续使用
+    # convert resized image back to bytes for downstream use
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     img_bytes = buf.getvalue()
 
-    # CLIP 嵌入
+    # CLIP embedding
     clip_embedding = _embed_image_clip(img)
 
-    # Vision 模型描述
+    # Vision model description
     b64 = base64.b64encode(img_bytes).decode("utf-8")
     description = _describe_image_vision(rt, b64, raw_file.filename)
 
-    # 将缩放后的图片保存到 MinIO 以供展示
+    # persist resized image to MinIO for display
     resized_key = f"{raw_file.workspace_id}/resized/{raw_file.id}.png"
     try:
         rt.storage.put_object(
@@ -70,10 +70,10 @@ def _parse_image(rt: Match3Runtime, raw_file: RawFile, file_bytes: bytes) -> lis
             raw_file_id=raw_file.id,
             workspace_id=raw_file.workspace_id,
             chunk_type=ChunkType.IMAGE,
-            content=description,              # 图片描述文本，用于 RAG 上下文
+            content=description,              # text description used as RAG context
             metadata={
                 "image_path": resized_key,
-                "clip_embedding": clip_embedding,  # 此处暂存，后续写入 Milvus image_chunks 集合
+                "clip_embedding": clip_embedding,  # stored here; written to Milvus image_chunks later
                 "original_filename": raw_file.filename,
             },
         )
@@ -81,7 +81,7 @@ def _parse_image(rt: Match3Runtime, raw_file: RawFile, file_bytes: bytes) -> lis
 
 
 def _resize_image(img: PILImage.Image, max_size: int) -> PILImage.Image:
-    """若图片最长边超过 max_size，则等比缩放。"""
+    """Proportionally resize if the longest edge exceeds max_size."""
     w, h = img.size
     if max(w, h) <= max_size:
         return img
@@ -90,7 +90,7 @@ def _resize_image(img: PILImage.Image, max_size: int) -> PILImage.Image:
 
 
 def _embed_image_clip(img: PILImage.Image) -> list[float]:
-    """生成 CLIP 图片嵌入（768 维，已归一化）。"""
+    """Generate CLIP image embedding (768-dim, L2-normalised)."""
     import torch
     import clip
 
@@ -107,7 +107,7 @@ def _embed_image_clip(img: PILImage.Image) -> list[float]:
 _clip_model_cache: dict = {}
 
 def _get_clip_model(device: str):
-    """延迟加载 CLIP 模型（按设备缓存）。"""
+    """Lazy-load CLIP model (cached per device)."""
     if device not in _clip_model_cache:
         import clip
         _clip_model_cache[device] = clip.load("ViT-L/14", device=device)
@@ -128,9 +128,14 @@ Be specific and factual. Include all numbers and text you can read.
 """
 
 def _describe_image_vision(rt: Match3Runtime, b64_image: str, filename: str) -> str:
-    """使用视觉模型（通过 rt.llm）生成图片的文字描述。"""
+    """Generate a text description of the image using a vision LLM."""
+    from app.intelligence.llm import OpenAILLMCaller
+    llm = OpenAILLMCaller(
+        api_key=rt.env.OPENAI_API_KEY,
+        model=rt.config.llm.vision_model,
+    )
     try:
-        description = rt.llm.complete(
+        description = llm.complete(
             messages=[{
                 "role": "user",
                 "content": [
@@ -207,18 +212,18 @@ video file
 
 ```python
 def _parse_video(rt: Match3Runtime, raw_file: RawFile, file_bytes: bytes) -> list[Chunk]:
-    """从视频中提取音频转录文本和关键帧。"""
+    """Extract audio transcript and keyframes from a video file."""
     import subprocess
     import tempfile
     import os
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        # 将视频写入临时文件
+        # write video to a temporary file
         video_path = os.path.join(tmpdir, "input.mp4")
         with open(video_path, "wb") as f:
             f.write(file_bytes)
 
-        # 提取音频
+        # extract audio
         audio_path = os.path.join(tmpdir, "audio.wav")
         try:
             subprocess.run(
@@ -230,10 +235,10 @@ def _parse_video(rt: Match3Runtime, raw_file: RawFile, file_bytes: bytes) -> lis
                 raw_file_id=raw_file.id,
             ).as_ex(e)
 
-        # 转录音频
+        # transcribe audio
         transcript = _transcribe_audio(rt, audio_path)
 
-        # 提取关键帧（最多 50 帧）
+        # extract keyframes (up to 50 frames at 1fps)
         frames_dir = os.path.join(tmpdir, "frames")
         os.makedirs(frames_dir)
         try:
@@ -249,12 +254,12 @@ def _parse_video(rt: Match3Runtime, raw_file: RawFile, file_bytes: bytes) -> lis
 
         chunks = []
 
-        # 处理转录文本
+        # process transcript
         if transcript.strip():
             text_chunks = _semantic_chunk(raw_file, transcript)
             chunks.extend(text_chunks)
 
-        # 处理关键帧（最多 10 帧以限制 Vision 模型调用次数）
+        # process keyframes (capped at 10 to limit Vision model calls)
         frame_files = sorted(os.listdir(frames_dir))[:10]
         for fname in frame_files:
             frame_path = os.path.join(frames_dir, fname)
@@ -272,7 +277,7 @@ def _parse_video(rt: Match3Runtime, raw_file: RawFile, file_bytes: bytes) -> lis
 
 ```python
 def _parse_audio(rt: Match3Runtime, raw_file: RawFile, file_bytes: bytes) -> list[Chunk]:
-    """使用 Whisper 转录音频文件，然后进行语义分块。"""
+    """Transcribe audio file with Whisper, then semantic-chunk the transcript."""
     import tempfile
     import os
 
@@ -293,7 +298,7 @@ def _parse_audio(rt: Match3Runtime, raw_file: RawFile, file_bytes: bytes) -> lis
 
 
 def _transcribe_audio(rt: Match3Runtime, audio_path: str) -> str:
-    """使用 Whisper 转录音频文件。"""
+    """Transcribe an audio file using Whisper."""
     import whisper
 
     model = _get_whisper_model()
@@ -328,7 +333,7 @@ def _parse_tabular(
     file_bytes: bytes,
     ext: str,
 ) -> list[Chunk]:
-    """将 CSV/TSV 解析为行级 Chunk 和摘要 Chunk。"""
+    """Parse CSV/TSV into row-level Chunks and a summary Chunk."""
     import csv
     import io
 
@@ -343,7 +348,7 @@ def _parse_tabular(
     headers = list(rows[0].keys())
     chunks = []
 
-    # 摘要 Chunk：列名 + 前 5 行构成 Markdown 表格
+    # summary Chunk: column names + first 5 rows as Markdown table
     table_preview = _rows_to_markdown(headers, rows[:5])
     summary_text = (
         f"Table: {raw_file.filename}\n"
@@ -360,7 +365,7 @@ def _parse_tabular(
         metadata={"row_count": len(rows), "columns": headers},
     ))
 
-    # 行级 Chunk（每 20 行一组）
+    # row-level Chunks (20 rows per chunk)
     ROWS_PER_CHUNK = 20
     for i in range(0, len(rows), ROWS_PER_CHUNK):
         batch = rows[i:i + ROWS_PER_CHUNK]
@@ -401,7 +406,7 @@ def search_images_by_text(
     workspace_id: str,
     top_k: int = 10,
 ) -> list[dict]:
-    """使用 CLIP 文本嵌入在 image_chunks 集合中进行图片检索。"""
+    """Search image_chunks collection using CLIP text embedding."""
     import clip
     import torch
 
@@ -415,7 +420,7 @@ def search_images_by_text(
     text_emb_list = text_emb.squeeze().cpu().tolist()
 
     try:
-        results = rt.milvus.search(
+        results = rt.vector_db.search(
             collection_name=constants.MILVUS_COLLECTION_IMAGES,
             data=[text_emb_list],
             anns_field="clip_embedding",

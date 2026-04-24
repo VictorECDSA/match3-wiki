@@ -130,7 +130,7 @@
 当 Service 需要跨多个 Repository 保证原子性时，打开一个 Session 并传给每个 `tx_` 方法：
 
 ```python
-with Session(self._rt.db_engine) as tx:
+with Session(self._rt.db) as tx:
     with tx.begin():           # auto-rollback on exception
         raw_file = raw_file_repo.tx_insert(tx, raw_file)
         chunks = chunk_repo.tx_bulk_insert(tx, chunks)

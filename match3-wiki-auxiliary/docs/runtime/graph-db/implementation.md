@@ -21,7 +21,7 @@ class Neo4jAdapter:
     """Neo4j 适配器，实现 GraphDB Protocol。"""
 
     def __init__(self, rt: Match3Runtime):
-        self.driver: Driver = rt.neo4j
+        self.driver: Driver = rt.graph_db
         self.logger = rt.logger
 
     def create_node(
@@ -186,8 +186,8 @@ def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
     neo4j_driver = GraphDatabase.driver(
         env.NEO4J_URI,
         auth=(env.NEO4J_USER, env.NEO4J_PASSWORD),
-        max_connection_lifetime=config.neo4j.max_connection_lifetime,
-        max_connection_pool_size=config.neo4j.max_connection_pool_size,
+        max_connection_lifetime=config.runtime.graph_db.implementations.neo4j.max_connection_lifetime,
+        max_connection_pool_size=config.runtime.graph_db.implementations.neo4j.max_connection_pool_size,
     )
     
     neo4j_adapter = Neo4jAdapter(
@@ -199,7 +199,7 @@ def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
 
     return Match3Runtime(
         # ...
-        neo4j=neo4j_adapter,
+        graph_db=neo4j_adapter,
         # ...
     )
 ```

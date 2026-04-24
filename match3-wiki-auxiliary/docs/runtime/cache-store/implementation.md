@@ -32,7 +32,7 @@ def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
     logger.info("Redis cache client initialized")
     
     return Match3Runtime(
-        redis=redis_client,
+        cache=redis_client,
         # ... 其他组件
     )
 ```
@@ -56,20 +56,6 @@ runtime:
       redis:
         max_connections: 50
         socket_timeout: 5
-```
-
-## 配置类
-
-```python
-# app/config/config.py
-
-class RedisConfig:
-    """Redis 配置"""
-    
-    def __init__(self, data: dict):
-        self.max_connections = self._require(data, "max_connections")
-        self.socket_timeout = self._require(data, "socket_timeout")
-        self.socket_connect_timeout = self._require(data, "socket_connect_timeout")
 ```
 
 ---

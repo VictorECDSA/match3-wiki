@@ -18,8 +18,8 @@ class ElasticsearchAdapter:
     """Elasticsearch 适配器，实现 FulltextSearch Protocol。"""
 
     def __init__(self, rt: Match3Runtime):
-        self.client: Elasticsearch = rt.es
-        self.config = rt.config.es
+        self.client: Elasticsearch = rt.search
+        self.config = rt.config.runtime.fulltext_search
         self.logger = rt.logger
 
     def create_index(self, index_name: str):
@@ -152,14 +152,14 @@ class ElasticsearchAdapter:
 from elasticsearch import Elasticsearch
 
 es_client = Elasticsearch(
-    env.ES_URL,
-    request_timeout=config.es.request_timeout,
-    max_retries=config.es.max_retries,
+    env.ELASTICSEARCH_URL,
+    request_timeout=config.runtime.fulltext_search.implementations.elasticsearch.request_timeout,
+    max_retries=config.runtime.fulltext_search.implementations.elasticsearch.max_retries,
 )
 
 return Match3Runtime(
     # ...
-    es=es_client,
+    search=es_client,
     # ...
 )
 ```

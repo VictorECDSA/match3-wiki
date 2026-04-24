@@ -128,11 +128,11 @@ def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
     """构建 Runtime 实例"""
     
     minio_adapter = MinioAdapter(
-        endpoint=config.minio.endpoint,
+        endpoint=config.runtime.object_storage.implementations.minio.endpoint,
         access_key=env.MINIO_ACCESS_KEY,
         secret_key=env.MINIO_SECRET_KEY,
-        bucket=config.minio.bucket,
-        secure=config.minio.secure,
+        bucket=config.runtime.object_storage.implementations.minio.bucket,
+        secure=config.runtime.object_storage.implementations.minio.secure,
     )
     
     logger.info(f"MinIO adapter initialized (bucket: {config.runtime.object_storage.implementations.minio.bucket})")
@@ -157,39 +157,20 @@ MINIO_SECRET_KEY=minioadmin
 ### 配置文件 (`config.yaml`)
 
 ```yaml
-minio:
-  endpoint: localhost:9000
-  bucket: match3-wiki-files
-  secure: false  # 生产环境改为 true
-```
-
-### 配置类
-
-```python
-# app/config/config.py
-
-class MinioConfig:
-    """MinIO 对象存储配置"""
-    
-    def __init__(self, data: dict):
-        self.endpoint = self._require(data, "endpoint")
-        self.bucket   = self._require(data, "bucket")
-        self.secure   = self._require(data, "secure")
-
-    def _require(self, data, key):
-        if key not in data or data[key] is None:
-            raise Match3Exception.of_code(
-                codes.CONFIG_MISSING_REQUIRED,
-                f"invalid minio.{key} is required"
-            ).ctx(key=key)
-        return data[key]
+runtime:
+  object_storage:
+    provider: minio
+    implementations:
+      minio:
+        endpoint: localhost:9000
+        bucket: match3-wiki-files
+        secure: false  # 生产环境改为 true
 ```
 
 ---
 
 **创建时间**：2026-04-23  
 **版本**：2.0
-        self.logger.debug(f"Deleted object: {key}")
 
     def get_presigned_url(
         self,

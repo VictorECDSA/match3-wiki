@@ -24,7 +24,7 @@ class MilvusAdapter:
 
     def __init__(self, client: MilvusClient, config: Config, logger: Logger):
         self.client = client
-        self.config = config.milvus
+        self.config = config.runtime.vector_db
         self.logger = logger
 
     def create_collection(
@@ -172,7 +172,7 @@ milvus_client = MilvusClient(uri=env.MILVUS_URI)
 
 return Match3Runtime(
     # ...
-    milvus=milvus_client,
+    vector_db=milvus_client,
     # ...
 )
 ```

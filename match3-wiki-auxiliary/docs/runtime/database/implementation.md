@@ -22,18 +22,18 @@ def build_runtime(config: Config, env: Env, logger: Logger) -> Match3Runtime:
 
     db_engine = create_engine(
         postgres_url,
-        pool_size=config.database.pool_size,
-        max_overflow=config.database.max_overflow,
-        pool_timeout=config.database.pool_timeout,
-        pool_recycle=config.database.pool_recycle,
+        pool_size=config.runtime.database.implementations.postgresql.pool_size,
+        max_overflow=config.runtime.database.implementations.postgresql.max_overflow,
+        pool_timeout=config.runtime.database.implementations.postgresql.pool_timeout,
+        pool_recycle=config.runtime.database.implementations.postgresql.pool_recycle,
         pool_pre_ping=True,  # 自动检测失效连接
     )
     
-    logger.info(f"PostgreSQL engine initialized (pool_size: {config.database.pool_size})")
+    logger.info(f"PostgreSQL engine initialized (pool_size: {config.runtime.database.implementations.postgresql.pool_size})")
 
     return Match3Runtime(
         # ...
-        db_engine=db_engine,
+        db=db_engine,
         # ...
     )
 ```
@@ -54,7 +54,7 @@ def get_db_session(rt: Match3Runtime) -> Session:
         # Perform database operations
         session.commit()
     """
-    return Session(rt.db_engine)
+    return Session(rt.db)
 ```
 
 ## ORM Model Definition

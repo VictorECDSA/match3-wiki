@@ -15,7 +15,7 @@ Runtime 是 Match3 Wiki 的基础设施抽象层,采用 **Protocol-based Archite
 
 ### 架构理念
 
-基于 SOLID 原则的 Protocol-based Architecture:
+基于 SOLID (Single Responsibility, Open-Closed, Liskov Substitution, Interface Segregation, Dependency Inversion) 原则的 Protocol-based Architecture:
 
 1. **依赖反转 (DIP)**: 业务层与实现层都依赖 Protocol 抽象,高层不依赖低层
 2. **接口隔离 (ISP)**: 每个 Protocol 小而专注,单一职责

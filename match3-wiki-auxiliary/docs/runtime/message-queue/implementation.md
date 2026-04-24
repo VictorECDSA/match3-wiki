@@ -1,8 +1,15 @@
-# 消息队列实现方案 — Redis
+# MessageQueue 实现 — Redis 8.6.2
 
-## 概述
+## 文件布局
 
-使用 **Redis v8.6.2** 实现 `MessageQueue` Protocol（Celery Broker/Backend），通过 **redis-py v5.3.0** 提供异步任务队列服务。
+```
+backend/runtime_impl/implements/message_queue/
+├── message_queue.py                # create_message_queue(config, env, logger) -> MessageQueue
+└── impl_redis/
+    └── redis_message_queue.py      # RedisMessageQueue
+```
+
+依赖：`redis-py` 5.3.0+（`redis.asyncio.Redis`）。
 
 ---
 
@@ -11,102 +18,132 @@
 ```python
 # backend/runtime_impl/implements/message_queue/message_queue.py
 from redis.asyncio import Redis
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
 from backend.config import Config, Env
-from backend.runtime.protocols.logger import Logger
-from backend.runtime.protocols.message_queue import MessageQueue
-from .impl_redis.redis_adapter import RedisMessageQueue
+from backend.runtime.protocols.logger.logger import Logger
+from backend.runtime.protocols.message_queue.message_queue import MessageQueue
+from .impl_redis.redis_message_queue import RedisMessageQueue
 
 def create_message_queue(config: Config, env: Env, logger: Logger) -> MessageQueue:
-    """创建 MessageQueue 实例
-    
-    Args:
-        config: 配置对象
-        env: 环境变量
-        logger: 日志记录器
-    
-    Returns:
-        实现了 MessageQueue Protocol 的 RedisMessageQueue 实例
-    
-    Raises:
-        ValueError: provider 不支持时抛出
-    """
     provider = config.runtime.message_queue.provider
-    
-    if provider == "redis":
-        redis_client = Redis.from_url(
+
+    if provider != "redis":
+        raise Match3Exception.of_code(
+            codes.CONFIG_MISSING_REQUIRED,
+            "unsupported message_queue provider",
+        ).ctx(provider=provider)
+
+    impl = config.runtime.message_queue.implementations.redis
+    try:
+        client = Redis.from_url(
             env.REDIS_BROKER_URL,
-            max_connections=config.runtime.message_queue.implementations.redis.max_connections,
-            socket_timeout=config.runtime.message_queue.implementations.redis.socket_timeout,
+            max_connections=impl.max_connections,
+            socket_timeout=impl.socket_timeout,
             decode_responses=True,
         )
-        
-        logger.info("Redis message queue client initialized")
-        return RedisMessageQueue(redis_client)
-    else:
-        raise ValueError(f"Unsupported message_queue provider: {provider}")
+    except Exception as e:
+        raise Match3Exception.of_code(codes.REDIS_ERROR, "failed to init redis queue") \
+            .ctx(url=env.REDIS_BROKER_URL).as_ex(e)
+
+    logger.info("redis message queue initialized", max_connections=impl.max_connections)
+    return RedisMessageQueue(client)
 ```
 
 ---
 
-## 适配器实现
+## 适配器
 
 ```python
-# backend/runtime_impl/implements/message_queue/impl_redis/redis_adapter.py
+# backend/runtime_impl/implements/message_queue/impl_redis/redis_message_queue.py
 from redis.asyncio import Redis
-from backend.runtime.protocols.message_queue import MessageQueue
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
 
 class RedisMessageQueue:
-    """Redis 适配器，实现 MessageQueue Protocol"""
-    
+    """Redis implementation of MessageQueue protocol."""
+
     def __init__(self, client: Redis):
         self._client = client
-    
-    async def enqueue(self, queue_name: str, message: str) -> bool:
-        """将消息加入队列"""
-        return await self._client.rpush(queue_name, message) > 0
-    
-    async def dequeue(self, queue_name: str, timeout: int = 0) -> str | None:
-        """从队列取出消息（阻塞）"""
-        result = await self._client.blpop(queue_name, timeout=timeout)
-        return result[1].decode() if result else None
-    
-    async def length(self, queue_name: str) -> int:
-        """获取队列长度"""
-        return await self._client.llen(queue_name)
+
+    async def lpush(self, key: str, *values: str) -> int:
+        try:
+            return await self._client.lpush(key, *values)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis lpush failed") \
+                .ctx(key=key, value_count=len(values)).as_ex(e)
+
+    async def rpush(self, key: str, *values: str) -> int:
+        try:
+            return await self._client.rpush(key, *values)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis rpush failed") \
+                .ctx(key=key, value_count=len(values)).as_ex(e)
+
+    async def lpop(self, key: str) -> str | None:
+        try:
+            return await self._client.lpop(key)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis lpop failed") \
+                .ctx(key=key).as_ex(e)
+
+    async def rpop(self, key: str) -> str | None:
+        try:
+            return await self._client.rpop(key)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis rpop failed") \
+                .ctx(key=key).as_ex(e)
+
+    async def brpop(self, keys: list[str], timeout: int = 0) -> tuple[str, str] | None:
+        try:
+            return await self._client.brpop(keys, timeout=timeout)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis brpop failed") \
+                .ctx(key_count=len(keys), timeout=timeout).as_ex(e)
+
+    async def blpop(self, keys: list[str], timeout: int = 0) -> tuple[str, str] | None:
+        try:
+            return await self._client.blpop(keys, timeout=timeout)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis blpop failed") \
+                .ctx(key_count=len(keys), timeout=timeout).as_ex(e)
+
+    async def llen(self, key: str) -> int:
+        try:
+            return await self._client.llen(key)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis llen failed") \
+                .ctx(key=key).as_ex(e)
+
+    async def close(self) -> None:
+        await self._client.aclose()
 ```
 
 ---
 
-## 配置参数
+## Celery 集成
 
-### Config (config.yaml)
+Celery 直接从 `.env` 读取 broker / backend URL，**不经过本 Protocol**：
 
-```yaml
-runtime:
-  message_queue:
-    provider: redis
-    implementations:
-      redis:
-        max_connections: 50    # 最大连接数
-        socket_timeout: 5      # Socket 超时（秒）
+```python
+# backend/app/workers/celery_app.py
+from celery import Celery
+import os
 
-celery:
-  task_time_limit: 3600          # 任务硬超时（秒）
-  task_soft_time_limit: 3000     # 任务软超时（秒）
-  worker_concurrency: 4          # Worker 并发数
-  worker_prefetch_multiplier: 2  # 预取任务倍数
+celery_app = Celery(
+    "match3",
+    broker=os.environ["REDIS_BROKER_URL"],
+    backend=os.environ["REDIS_RESULT_URL"],
+)
 ```
 
-### Env (.env)
-
-```bash
-REDIS_BROKER_URL=redis://localhost:6379/1
-REDIS_RESULT_URL=redis://localhost:6379/2
-```
+本 Protocol 仅用于应用层自定义队列（如跨服务通知、业务事件总线）。
 
 ---
 
-## 相关文档
+## 配置与环境
 
-- **[protocol.md](./protocol.md)** — MessageQueue Protocol 定义
-- **[versions/redis-v8.6.2.md](./versions/redis-v8.6.2.md)** — Redis API 详细说明
+- `config.yaml`：`runtime.message_queue.*`
+- `.env`：`REDIS_BROKER_URL`、`REDIS_RESULT_URL`
+
+详见 [`../config.md`](../config.md)。

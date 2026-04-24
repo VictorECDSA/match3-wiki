@@ -1,8 +1,8 @@
-# 索引流程：文档切块与建索引
+# 文档处理：格式转换、切块与 Parent-Child 分层
 
 ## 概述
 
-本文件描述 hybrid-search 路径的**离线索引流程**，在文档导入时执行，为在线检索奠定基础。
+本文件描述 hybrid-search 路径的**离线文档处理流程**（步骤 1-3），在文档导入时执行。处理完成后，三路并行建索引的细节见 `030-rag/processing/indexing.md`。
 
 ---
 
@@ -69,7 +69,7 @@
 
 ---
 
-## 步骤 3：Parent-Child 索引层（必须应用）
+## 步骤 3：Parent-Child 分层（必须应用）
 
 `parent_child` 不是切块方法的一个选项，而是叠加在切块结果之上的**索引与存储策略**，必须应用。
 
@@ -102,26 +102,8 @@
 
 ---
 
-## 步骤 4：三路并行建索引
+## 下一步：建索引
 
-切块 + Parent-Child 处理完成后，三路索引并发写入：
+步骤 1-3 完成后，chunks 写入 PostgreSQL `t_text_chunks`，随后触发三路并行建索引（Milvus / Elasticsearch / Neo4j）。
 
-| 目标存储 | 写入内容 | 必须/可选 |
-|---------|---------|---------|
-| Milvus | Dense 向量（text-embedding-3-large）+ Sparse 向量（BGE-M3 SPLADE） | 必须 |
-| Elasticsearch | 原文 text + metadata（workspace_id, file_type, topic_tag） | 必须 |
-| Neo4j | LLM 抽取的实体节点 + 关系边，关联到 chunk_id | 可选（`graph=True` 场景才需要）|
-
-Neo4j 实体抽取成本较高（每个 chunk 调用一次 LLM），**默认关闭**，只在明确需要多跳推理的工作区开启。
-
----
-
-## 索引侧与查询侧的对应关系
-
-| 索引侧决策 | 查询侧影响 |
-|-----------|-----------|
-| parent_child 必须应用 | 查询返回大块上下文，减少截断损失 |
-| 建了 sparse 索引 | 查询侧才能开 `sparse=True` |
-| 建了 Neo4j 图谱 | 查询侧才能开 `graph=True` |
-
-查询侧的五阶段流水线详见 `030-rag/retrieval/hybrid-search.md`。
+详见 `030-rag/processing/indexing.md`。

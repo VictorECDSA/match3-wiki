@@ -1,8 +1,16 @@
-# Fulltext Search Implementation — Elasticsearch
+# FullTextSearch 实现 — Elasticsearch 9.3.3
 
-## 概述
+## 文件布局
 
-使用 **Elasticsearch v9.3.3** 实现 `FullTextSearch` Protocol，提供 BM25 关键词搜索能力。
+```
+backend/runtime_impl/implements/fulltext_search/
+├── fulltext_search.py                          # create_fulltext_search(config, env, logger) -> FullTextSearch
+└── impl_elasticsearch/
+    ├── elasticsearch_search.py                 # ElasticsearchSearch
+    └── elasticsearch_search_result.py          # ElasticsearchSearchResult
+```
+
+依赖：`elasticsearch` 9.3.x（含 `elasticsearch.helpers.bulk`）。
 
 ---
 
@@ -11,205 +19,195 @@
 ```python
 # backend/runtime_impl/implements/fulltext_search/fulltext_search.py
 from elasticsearch import Elasticsearch
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
 from backend.config import Config, Env
-from backend.runtime.protocols.logger import Logger
-from backend.runtime.protocols.fulltext_search import FullTextSearch
-from .impl_elasticsearch.es_adapter import ElasticsearchAdapter
+from backend.runtime.protocols.logger.logger import Logger
+from backend.runtime.protocols.fulltext_search.fulltext_search import FullTextSearch
+from .impl_elasticsearch.elasticsearch_search import ElasticsearchSearch
 
 def create_fulltext_search(config: Config, env: Env, logger: Logger) -> FullTextSearch:
-    """创建 FullTextSearch 实例
-    
-    Args:
-        config: 配置对象
-        env: 环境变量
-        logger: 日志记录器
-    
-    Returns:
-        实现了 FullTextSearch Protocol 的 ElasticsearchAdapter 实例
-    
-    Raises:
-        ValueError: provider 不支持时抛出
-    """
     provider = config.runtime.fulltext_search.provider
-    
-    if provider == "elasticsearch":
-        es_client = Elasticsearch(
-            env.ELASTICSEARCH_URL,
-            request_timeout=config.runtime.fulltext_search.implementations.elasticsearch.request_timeout,
-            max_retries=config.runtime.fulltext_search.implementations.elasticsearch.max_retries,
+
+    if provider != "elasticsearch":
+        raise Match3Exception.of_code(
+            codes.CONFIG_MISSING_REQUIRED,
+            "unsupported fulltext_search provider",
+        ).ctx(provider=provider)
+
+    impl = config.runtime.fulltext_search.implementations.elasticsearch
+    hosts = [h.strip() for h in env.ELASTICSEARCH_URL.split(",") if h.strip()]
+    basic_auth = (
+        (env.ELASTICSEARCH_USER, env.ELASTICSEARCH_PASSWORD)
+        if env.ELASTICSEARCH_USER else None
+    )
+    try:
+        client = Elasticsearch(
+            hosts=hosts,
+            basic_auth=basic_auth,
+            request_timeout=impl.request_timeout,
+            max_retries=impl.max_retries,
+            retry_on_timeout=impl.retry_on_timeout,
+            verify_certs=impl.verify_certs,
         )
-        
-        logger.info("Elasticsearch client initialized")
-        return ElasticsearchAdapter(es_client, config, logger)
-    else:
-        raise ValueError(f"Unsupported fulltext_search provider: {provider}")
+        if not client.ping():
+            raise RuntimeError("elasticsearch ping returned False")
+    except Exception as e:
+        raise Match3Exception.of_code(codes.ES_ERROR, "failed to init elasticsearch") \
+            .ctx(hosts=",".join(hosts)).as_ex(e)
+
+    logger.info("elasticsearch client initialized", hosts=",".join(hosts))
+    return ElasticsearchSearch(client)
 ```
 
 ---
 
-## 适配器实现
+## 适配器
 
 ```python
-# backend/runtime_impl/implements/fulltext_search/impl_elasticsearch/es_adapter.py
+# backend/runtime_impl/implements/fulltext_search/impl_elasticsearch/elasticsearch_search.py
+from typing import Any
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
-from backend.config import Config
-from backend.runtime.protocols.logger import Logger
-from backend.runtime.protocols.fulltext_search import FullTextSearch
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
+from .elasticsearch_search_result import ElasticsearchSearchResult
 
-class ElasticsearchAdapter:
-    """Elasticsearch 适配器，实现 FullTextSearch Protocol"""
-    
-    def __init__(self, client: Elasticsearch, config: Config, logger: Logger):
-        self.client = client
-        self.config = config.runtime.fulltext_search
-        self.logger = logger
-    
-    def create_index(self, index_name: str):
-        """创建索引，配置 BM25 和分词器"""
-        if self.client.indices.exists(index=index_name):
-            self.logger.info(f"Index {index_name} already exists")
-            return
-        
-        self.client.indices.create(
-            index=index_name,
-            body={
-                "settings": {
-                    "number_of_shards": 3,
-                    "number_of_replicas": 1,
-                    "analysis": {
-                        "analyzer": {
-                            "default": {"type": "standard"},
-                            "english_analyzer": {
-                                "type": "standard",
-                                "stopwords": "_english_",
-                            },
-                        }
-                    },
-                },
-                "mappings": {
-                    "properties": {
-                        "id": {"type": "integer"},
-                        "text": {
-                            "type": "text",
-                            "analyzer": "standard",
-                            "fields": {
-                                "english": {
-                                    "type": "text",
-                                    "analyzer": "english_analyzer",
-                                }
-                            },
-                        },
-                        "workspace_id": {"type": "integer"},
-                        "raw_file_id": {"type": "integer"},
-                    }
-                },
-            }
-        )
-        self.logger.info(f"Created index: {index_name}")
-    
-    def index_document(self, index_name: str, doc_id: int, document: dict):
-        """索引单个文档"""
-        self.client.index(
-            index=index_name,
-            id=doc_id,
-            document=document,
-        )
-        self.logger.debug(f"Indexed document {doc_id} into {index_name}")
-    
-    def bulk_index(self, index_name: str, documents: list[dict]):
-        """批量索引文档"""
+class ElasticsearchSearch:
+    """Elasticsearch implementation of FullTextSearch protocol."""
+
+    def __init__(self, client: Elasticsearch):
+        self._client = client
+
+    def index(
+        self,
+        index_name: str,
+        document: dict[str, Any],
+        document_id: str | None = None,
+    ) -> str:
+        try:
+            resp = self._client.index(index=index_name, document=document, id=document_id)
+            return str(resp["_id"])
+        except Exception as e:
+            raise Match3Exception.of_code(codes.ES_ERROR, "es index failed") \
+                .ctx(index=index_name, document_id=document_id).as_ex(e)
+
+    def bulk_index(
+        self,
+        index_name: str,
+        documents: list[dict[str, Any]],
+    ) -> tuple[int, int]:
         actions = [
             {
+                "_op_type": "index",
                 "_index": index_name,
-                "_id": doc["id"],
-                "_source": doc,
+                "_id": doc["_id"],
+                "_source": {k: v for k, v in doc.items() if k != "_id"},
             }
             for doc in documents
         ]
-        
-        success, failed = bulk(self.client, actions)
-        self.logger.info(f"Bulk indexed: {success} success, {failed} failed")
-    
+        try:
+            success, errors = bulk(self._client, actions, raise_on_error=False)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.ES_ERROR, "es bulk index failed") \
+                .ctx(index=index_name, doc_count=len(documents)).as_ex(e)
+        failed = len(errors) if isinstance(errors, list) else 0
+        return success, failed
+
     def search(
         self,
         index_name: str,
         query: str,
-        workspace_id: int,
-        top_k: int = 20,
-    ) -> list[dict]:
-        """BM25 关键词搜索"""
-        response = self.client.search(
-            index=index_name,
-            body={
-                "query": {
-                    "bool": {
-                        "must": [
-                            {
-                                "multi_match": {
-                                    "query": query,
-                                    "fields": ["text^2", "text.english"],
-                                    "type": "best_fields",
-                                }
-                            }
-                        ],
-                        "filter": [
-                            {"term": {"workspace_id": workspace_id}}
-                        ],
-                    }
-                },
-                "size": top_k,
-            }
-        )
-        
-        return [
-            {
-                "id": hit["_source"]["id"],
-                "score": hit["_score"],
-                "text": hit["_source"]["text"],
-                "raw_file_id": hit["_source"]["raw_file_id"],
-            }
-            for hit in response["hits"]["hits"]
-        ]
-    
-    def delete_document(self, index_name: str, doc_id: int):
-        """删除文档"""
-        self.client.delete(index=index_name, id=doc_id)
-        self.logger.debug(f"Deleted document {doc_id} from {index_name}")
-    
-    def delete_index(self, index_name: str):
-        """删除索引"""
-        if self.client.indices.exists(index=index_name):
-            self.client.indices.delete(index=index_name)
-            self.logger.info(f"Deleted index: {index_name}")
+        limit: int = 10,
+        filters: dict[str, Any] | None = None,
+        fields: list[str] | None = None,
+    ) -> list[ElasticsearchSearchResult]:
+        must = [{"multi_match": {"query": query, "fields": ["content^2", "title"]}}]
+        filter_clauses = [{"term": {k: v}} for k, v in (filters or {}).items()]
+        body = {
+            "query": {"bool": {"must": must, "filter": filter_clauses}},
+            "size": limit,
+        }
+        if fields is not None:
+            body["_source"] = fields
+
+        try:
+            resp = self._client.search(index=index_name, body=body)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.ES_ERROR, "es search failed") \
+                .ctx(index=index_name, limit=limit).as_ex(e)
+
+        return [ElasticsearchSearchResult(hit) for hit in resp["hits"]["hits"]]
+
+    def delete(
+        self,
+        index_name: str,
+        document_id: str,
+    ) -> bool:
+        try:
+            resp = self._client.delete(index=index_name, id=document_id, ignore=[404])
+        except Exception as e:
+            raise Match3Exception.of_code(codes.ES_ERROR, "es delete failed") \
+                .ctx(index=index_name, document_id=document_id).as_ex(e)
+        return resp.get("result") == "deleted"
+
+    def delete_by_query(
+        self,
+        index_name: str,
+        filters: dict[str, Any],
+    ) -> int:
+        body = {"query": {"bool": {"filter": [{"term": {k: v}} for k, v in filters.items()]}}}
+        try:
+            resp = self._client.delete_by_query(index=index_name, body=body, refresh=True)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.ES_ERROR, "es delete_by_query failed") \
+                .ctx(index=index_name, filter_keys=list(filters.keys())).as_ex(e)
+        return int(resp.get("deleted", 0))
+
+    def close(self) -> None:
+        self._client.close()
 ```
 
 ---
 
-## 配置参数
+## 搜索结果
 
-### Config (config.yaml)
+```python
+# backend/runtime_impl/implements/fulltext_search/impl_elasticsearch/elasticsearch_search_result.py
+from typing import Any
 
-```yaml
-runtime:
-  fulltext_search:
-    provider: elasticsearch
-    implementations:
-      elasticsearch:
-        request_timeout: 30    # 请求超时（秒）
-        max_retries: 3         # 最大重试次数
-```
+class ElasticsearchSearchResult:
+    """Wraps one ES hit as SearchResult protocol."""
 
-### Env (.env)
+    def __init__(self, hit: dict[str, Any]):
+        self._hit = hit
 
-```bash
-ELASTICSEARCH_URL=http://localhost:9200
+    @property
+    def id(self) -> str:
+        return str(self._hit["_id"])
+
+    @property
+    def score(self) -> float:
+        return float(self._hit.get("_score") or 0.0)
+
+    @property
+    def source(self) -> dict[str, Any]:
+        return dict(self._hit.get("_source", {}))
 ```
 
 ---
 
-## 相关文档
+## 配置与环境
 
-- **[protocol.md](./protocol.md)** — FullTextSearch Protocol 定义
-- **[versions/elasticsearch-v9.3.3.md](./versions/elasticsearch-v9.3.3.md)** — Elasticsearch 版本技术文档
-- **[../../design/solution-final/030-rag/](../../design/solution-final/030-rag/)** — BM25 在 RAG 中的使用
+- `config.yaml`：`runtime.fulltext_search.*`
+- `.env`：`ELASTICSEARCH_URL`、`ELASTICSEARCH_USER`、`ELASTICSEARCH_PASSWORD`
+
+详见 [`../config.md`](../config.md)。
+
+---
+
+## 关联文档
+
+- [protocol.md](./protocol.md) — FullTextSearch / SearchResult Protocol
+- [versions/elasticsearch-v9.3.3.md](./versions/elasticsearch-v9.3.3.md) — elasticsearch-py 9.3 接口速查
+- [`../../design/solution-final/030-rag/`](../../design/solution-final/030-rag/) — Hybrid Search 中 BM25 的角色

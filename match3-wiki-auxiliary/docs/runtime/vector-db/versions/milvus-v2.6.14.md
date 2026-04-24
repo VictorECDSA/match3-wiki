@@ -208,15 +208,13 @@ def delete(
 
 ### 1. 客户端创建
 
-在 `Match3Runtime` 中创建客户端：
-
 ```python
 from pymilvus import MilvusClient
 
-# 从环境变量读取连接地址
-milvus_client = MilvusClient(
-    uri=env.MILVUS_URI,  # 例如: "http://localhost:19530"
-    timeout=30.0,         # 请求超时 30 秒
+client = MilvusClient(
+    uri="http://localhost:19530",   # Standalone 或 Cluster URI
+    token=None,                     # 云端或启用鉴权时填入
+    timeout=30.0,                   # 请求超时（秒）
 )
 ```
 
@@ -514,72 +512,9 @@ client.delete(
 
 ---
 
-## Match3Runtime 接口设计
+## Runtime 集成
 
-在 Runtime 中，Milvus 以 `MilvusClient` 注入：
-
-```python
-from typing import Protocol
-from pymilvus import MilvusClient
-
-@dataclass(frozen=True)
-class Match3Runtime:
-    config: Config
-    env: Env
-    logger: Logger
-    milvus: MilvusClient  # Milvus 客户端
-    # ... 其他依赖
-```
-
-**为什么不用 Protocol？**
-- `MilvusClient` 是官方标准接口，功能完备
-- 无需额外抽象层
-- 如需替换向量数据库，只需修改 `build_runtime()` 中的实现
-
-**替换其他向量数据库示例**:
-
-```python
-# 替换为 Qdrant
-from qdrant_client import QdrantClient
-
-def build_runtime(config, env) -> Match3Runtime:
-    # ...
-    milvus = QdrantClient(url=env.QDRANT_URL)  # 修改这里
-    # 其他代码不变
-    return Match3Runtime(milvus=milvus, ...)
-```
-
-**服务层使用示例**:
-
-```python
-class EmbedService:
-    def __init__(self, rt: Match3Runtime):
-        self.milvus = rt.milvus
-        self.embedder = rt.embedder
-        self.logger = rt.logger
-    
-    def search_similar_chunks(
-        self,
-        query: str,
-        workspace_id: int,
-        top_k: int = 20,
-    ) -> list[dict]:
-        # 混合向量检索
-        dense, sparse = self.embedder.embed_both([query])
-        
-        results = self.milvus.hybrid_search(
-            collection_name=f"workspace_{workspace_id}",
-            data=[{"dense": dense[0], "sparse": sparse[0]}],
-            limit=top_k,
-            reranker="rrf",
-            reranker_params={"k": 60},
-            output_fields=["text", "chunk_id"],
-        )
-        
-        return results[0]
-```
-
----
+> 请参考 [`../protocol.md`](../protocol.md) 中的 `VectorDatabase` / `VectorSearchResult` 定义以及 [`../implementation.md`](../implementation.md) 中的 `MilvusVectorDatabase` 适配器。
 
 ## Docker 部署
 

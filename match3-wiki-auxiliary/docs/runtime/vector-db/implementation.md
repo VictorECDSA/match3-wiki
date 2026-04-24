@@ -1,8 +1,16 @@
-# Vector Database Implementation — Milvus
+# VectorDatabase 实现 — Milvus 2.6.14
 
-## 概述
+## 文件布局
 
-使用 **Milvus v2.6.14** 实现 `VectorDatabase` Protocol，支持稠密向量、稀疏向量、混合检索和元数据过滤。
+```
+backend/runtime_impl/implements/vector_db/
+├── vector_db.py                            # create_vector_database(config, env, logger) -> VectorDatabase
+└── impl_milvus/
+    ├── milvus_vector_db.py                 # MilvusVectorDatabase
+    └── milvus_vector_search_result.py      # MilvusVectorSearchResult
+```
+
+依赖：`pymilvus` 2.6.14+。
 
 ---
 
@@ -11,214 +19,185 @@
 ```python
 # backend/runtime_impl/implements/vector_db/vector_db.py
 from pymilvus import MilvusClient
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
 from backend.config import Config, Env
-from backend.runtime.protocols.logger import Logger
-from backend.runtime.protocols.vector_db import VectorDatabase
-from .impl_milvus.milvus_adapter import MilvusAdapter
+from backend.runtime.protocols.logger.logger import Logger
+from backend.runtime.protocols.vector_db.vector_db import VectorDatabase
+from .impl_milvus.milvus_vector_db import MilvusVectorDatabase
 
 def create_vector_database(config: Config, env: Env, logger: Logger) -> VectorDatabase:
-    """创建 VectorDatabase 实例
-    
-    Args:
-        config: 配置对象
-        env: 环境变量
-        logger: 日志记录器
-    
-    Returns:
-        实现了 VectorDatabase Protocol 的 MilvusAdapter 实例
-    
-    Raises:
-        ValueError: provider 不支持时抛出
-    """
     provider = config.runtime.vector_db.provider
-    
-    if provider == "milvus":
-        milvus_client = MilvusClient(
+
+    if provider != "milvus":
+        raise Match3Exception.of_code(
+            codes.CONFIG_MISSING_REQUIRED,
+            "unsupported vector_db provider",
+        ).ctx(provider=provider)
+
+    impl = config.runtime.vector_db.implementations.milvus
+    try:
+        client = MilvusClient(
             uri=env.MILVUS_URI,
-            timeout=config.runtime.vector_db.implementations.milvus.timeout,
+            token=env.MILVUS_TOKEN or None,
+            timeout=impl.timeout,
         )
-        
-        logger.info("Milvus client initialized")
-        return MilvusAdapter(milvus_client, config, logger)
-    else:
-        raise ValueError(f"Unsupported vector_db provider: {provider}")
+    except Exception as e:
+        raise Match3Exception.of_code(codes.MILVUS_ERROR, "failed to init milvus") \
+            .ctx(uri=env.MILVUS_URI).as_ex(e)
+
+    logger.info("milvus client initialized", uri=env.MILVUS_URI)
+    return MilvusVectorDatabase(client, consistency_level=impl.consistency_level)
 ```
 
 ---
 
-## 适配器实现
+## 适配器
 
 ```python
-# backend/runtime_impl/implements/vector_db/impl_milvus/milvus_adapter.py
-from pymilvus import MilvusClient, DataType, FieldSchema, CollectionSchema
-from backend.config import Config
-from backend.runtime.protocols.logger import Logger
-from backend.runtime.protocols.vector_db import VectorDatabase
+# backend/runtime_impl/implements/vector_db/impl_milvus/milvus_vector_db.py
+from typing import Any
+from pymilvus import MilvusClient, AnnSearchRequest, RRFRanker
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
+from .milvus_vector_search_result import MilvusVectorSearchResult
 
-class MilvusAdapter:
-    """Milvus 适配器，实现 VectorDatabase Protocol"""
-    
-    def __init__(self, client: MilvusClient, config: Config, logger: Logger):
-        self.client = client
-        self.config = config.runtime.vector_db
-        self.logger = logger
-    
-    def create_collection(
-        self,
-        collection_name: str,
-        dense_dim: int = 1536,
-        enable_sparse: bool = False,
-    ):
-        """创建集合"""
-        schema = self._build_schema(dense_dim, enable_sparse)
-        
-        self.client.create_collection(
-            collection_name=collection_name,
-            schema=schema,
-            index_params=self._build_index_params(dense_dim, enable_sparse),
-        )
-        self.logger.info(f"Created collection: {collection_name}")
-    
-    def _build_schema(self, dense_dim: int, enable_sparse: bool):
-        """构建集合 Schema"""
-        fields = [
-            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=False),
-            FieldSchema(name="dense_vector", dtype=DataType.FLOAT_VECTOR, dim=dense_dim),
-            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-            FieldSchema(name="workspace_id", dtype=DataType.INT64),
-            FieldSchema(name="raw_file_id", dtype=DataType.INT64),
-        ]
-        
-        if enable_sparse:
-            fields.append(
-                FieldSchema(name="sparse_vector", dtype=DataType.SPARSE_FLOAT_VECTOR)
-            )
-        
-        return CollectionSchema(fields=fields, description="Match3 vector collection")
-    
-    def _build_index_params(self, dense_dim: int, enable_sparse: bool):
-        """构建索引参数"""
-        index_params = [
-            {
-                "field_name": "dense_vector",
-                "index_type": "HNSW",
-                "metric_type": "COSINE",
-                "params": {"M": 16, "efConstruction": 256},
-            }
-        ]
-        
-        if enable_sparse:
-            index_params.append({
-                "field_name": "sparse_vector",
-                "index_type": "SPARSE_INVERTED_INDEX",
-                "metric_type": "IP",
-            })
-        
-        return index_params
-    
-    def insert(self, collection_name: str, data: list[dict]):
-        """插入向量数据"""
-        self.client.insert(
-            collection_name=collection_name,
-            data=data,
-        )
-        self.logger.debug(f"Inserted {len(data)} vectors into {collection_name}")
-    
+class MilvusVectorDatabase:
+    """Milvus implementation of VectorDatabase protocol."""
+
+    def __init__(self, client: MilvusClient, consistency_level: str):
+        self._client = client
+        self._consistency_level = consistency_level
+
     def search(
         self,
         collection_name: str,
         query_vector: list[float],
-        limit: int = 20,
+        limit: int = 10,
         filter_expr: str | None = None,
-    ) -> list[dict]:
-        """稠密向量检索"""
-        results = self.client.search(
-            collection_name=collection_name,
-            data=[query_vector],
-            anns_field="dense_vector",
-            limit=limit,
-            filter=filter_expr,
-            output_fields=["id", "text", "workspace_id", "raw_file_id"],
-        )
-        
-        return self._parse_results(results[0])
-    
+        output_fields: list[str] | None = None,
+    ) -> list[MilvusVectorSearchResult]:
+        try:
+            raw = self._client.search(
+                collection_name=collection_name,
+                data=[query_vector],
+                anns_field="dense_vector",
+                limit=limit,
+                filter=filter_expr or "",
+                output_fields=output_fields,
+                consistency_level=self._consistency_level,
+            )
+        except Exception as e:
+            raise Match3Exception.of_code(codes.MILVUS_ERROR, "milvus search failed") \
+                .ctx(collection=collection_name, limit=limit).as_ex(e)
+        return [MilvusVectorSearchResult(hit) for hit in raw[0]]
+
     def hybrid_search(
         self,
         collection_name: str,
         dense_vector: list[float],
-        sparse_vector: dict,
-        limit: int = 20,
+        sparse_vector: dict[int, float],
+        limit: int = 10,
+        rrf_k: int = 60,
         filter_expr: str | None = None,
-    ) -> list[dict]:
-        """混合检索（Dense + Sparse + RRF）"""
-        from pymilvus import AnnSearchRequest, RRFRanker
-        
+        output_fields: list[str] | None = None,
+    ) -> list[MilvusVectorSearchResult]:
         dense_req = AnnSearchRequest(
             data=[dense_vector],
             anns_field="dense_vector",
             param={"metric_type": "COSINE", "params": {"ef": 64}},
             limit=limit * 2,
+            expr=filter_expr,
         )
-        
         sparse_req = AnnSearchRequest(
             data=[sparse_vector],
             anns_field="sparse_vector",
             param={"metric_type": "IP"},
             limit=limit * 2,
+            expr=filter_expr,
         )
-        
-        results = self.client.hybrid_search(
-            collection_name=collection_name,
-            reqs=[dense_req, sparse_req],
-            ranker=RRFRanker(k=60),
-            limit=limit,
-            filter=filter_expr,
-            output_fields=["id", "text", "workspace_id", "raw_file_id"],
-        )
-        
-        return self._parse_results(results[0])
-    
-    def _parse_results(self, raw_results) -> list[dict]:
-        """解析检索结果"""
-        return [
-            {
-                "id": hit.id,
-                "score": hit.score,
-                "text": hit.entity.get("text"),
-                "workspace_id": hit.entity.get("workspace_id"),
-                "raw_file_id": hit.entity.get("raw_file_id"),
-            }
-            for hit in raw_results
-        ]
+        try:
+            raw = self._client.hybrid_search(
+                collection_name=collection_name,
+                reqs=[dense_req, sparse_req],
+                ranker=RRFRanker(k=rrf_k),
+                limit=limit,
+                output_fields=output_fields,
+                consistency_level=self._consistency_level,
+            )
+        except Exception as e:
+            raise Match3Exception.of_code(codes.MILVUS_ERROR, "milvus hybrid search failed") \
+                .ctx(collection=collection_name, limit=limit, rrf_k=rrf_k).as_ex(e)
+        return [MilvusVectorSearchResult(hit) for hit in raw[0]]
+
+    def insert(
+        self,
+        collection_name: str,
+        data: list[dict[str, Any]],
+    ) -> list[int | str]:
+        try:
+            result = self._client.insert(collection_name=collection_name, data=data)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.MILVUS_ERROR, "milvus insert failed") \
+                .ctx(collection=collection_name, count=len(data)).as_ex(e)
+        return list(result.get("ids", []))
+
+    def delete(
+        self,
+        collection_name: str,
+        ids: list[int | str],
+    ) -> int:
+        try:
+            result = self._client.delete(collection_name=collection_name, ids=ids)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.MILVUS_ERROR, "milvus delete failed") \
+                .ctx(collection=collection_name, count=len(ids)).as_ex(e)
+        return int(result.get("delete_count", 0))
+
+    def close(self) -> None:
+        self._client.close()
 ```
 
 ---
 
-## 配置参数
+## 搜索结果
 
-### Config (config.yaml)
+```python
+# backend/runtime_impl/implements/vector_db/impl_milvus/milvus_vector_search_result.py
+from typing import Any
 
-```yaml
-runtime:
-  vector_db:
-    provider: milvus
-    implementations:
-      milvus:
-        timeout: 30                      # 请求超时（秒）
-        consistency_level: Eventually    # 一致性级别: Strong | Bounded | Eventually
-```
+class MilvusVectorSearchResult:
+    """Wraps one pymilvus Hit as VectorSearchResult protocol."""
 
-### Env (.env)
+    def __init__(self, hit: Any):
+        self._hit = hit
 
-```bash
-MILVUS_URI=http://localhost:19530
+    @property
+    def id(self) -> int | str:
+        return self._hit["id"]
+
+    @property
+    def distance(self) -> float:
+        return float(self._hit["distance"])
+
+    @property
+    def entity(self) -> dict[str, Any]:
+        return dict(self._hit.get("entity", {}))
 ```
 
 ---
 
-## 相关文档
+## 配置与环境
 
-- **[protocol.md](./protocol.md)** — VectorDatabase Protocol 定义
-- **[versions/milvus-v2.6.14.md](./versions/milvus-v2.6.14.md)** — Milvus 版本技术文档
-- **[../../design/solution-final/020-ingestion/](../../design/solution-final/020-ingestion/)** — 向量嵌入流程
+- `config.yaml`：`runtime.vector_db.*`
+- `.env`：`MILVUS_URI`、`MILVUS_TOKEN`
+
+详见 [`../config.md`](../config.md)。
+
+---
+
+## 关联文档
+
+- [protocol.md](./protocol.md) — VectorDatabase / VectorSearchResult Protocol
+- [versions/milvus-v2.6.14.md](./versions/milvus-v2.6.14.md) — pymilvus 2.6 接口速查
+- [`../../design/solution-final/020-ingestion/`](../../design/solution-final/020-ingestion/) — 向量嵌入与集合 schema 定义

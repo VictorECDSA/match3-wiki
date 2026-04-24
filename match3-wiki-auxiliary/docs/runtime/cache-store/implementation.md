@@ -1,8 +1,15 @@
-# 缓存存储实现方案 — Redis
+# CacheStore 实现 — Redis 8.6.2
 
-## 概述
+## 文件布局
 
-使用 **Redis v8.6.2** 实现 `CacheStore` Protocol，通过 **redis-py v5.3.0** 异步客户端提供高性能缓存服务。
+```
+backend/runtime_impl/implements/cache_store/
+├── cache_store.py                  # create_cache_store(config, env, logger) -> CacheStore
+└── impl_redis/
+    └── redis_cache_store.py        # RedisCacheStore
+```
+
+依赖：`redis-py` 5.3.0+（`redis.asyncio.Redis`）。
 
 ---
 
@@ -11,111 +18,119 @@
 ```python
 # backend/runtime_impl/implements/cache_store/cache_store.py
 from redis.asyncio import Redis
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
 from backend.config import Config, Env
-from backend.runtime.protocols.logger import Logger
-from backend.runtime.protocols.cache_store import CacheStore
-from .impl_redis.redis_adapter import RedisAdapter
+from backend.runtime.protocols.logger.logger import Logger
+from backend.runtime.protocols.cache_store.cache_store import CacheStore
+from .impl_redis.redis_cache_store import RedisCacheStore
 
 def create_cache_store(config: Config, env: Env, logger: Logger) -> CacheStore:
-    """创建 CacheStore 实例
-    
-    Args:
-        config: 配置对象
-        env: 环境变量
-        logger: 日志记录器
-    
-    Returns:
-        实现了 CacheStore Protocol 的 RedisAdapter 实例
-    
-    Raises:
-        ValueError: provider 不支持时抛出
-    """
     provider = config.runtime.cache_store.provider
-    
-    if provider == "redis":
-        redis_client = Redis.from_url(
+
+    if provider != "redis":
+        raise Match3Exception.of_code(
+            codes.CONFIG_MISSING_REQUIRED,
+            "unsupported cache_store provider",
+        ).ctx(provider=provider)
+
+    impl = config.runtime.cache_store.implementations.redis
+    try:
+        client = Redis.from_url(
             env.REDIS_CACHE_URL,
-            max_connections=config.runtime.cache_store.implementations.redis.max_connections,
-            socket_timeout=config.runtime.cache_store.implementations.redis.socket_timeout,
-            decode_responses=True,
+            max_connections=impl.max_connections,
+            socket_timeout=impl.socket_timeout,
+            decode_responses=impl.decode_responses,
         )
-        
-        logger.info("Redis cache client initialized")
-        return RedisAdapter(redis_client)
-    else:
-        raise ValueError(f"Unsupported cache_store provider: {provider}")
+    except Exception as e:
+        raise Match3Exception.of_code(codes.REDIS_ERROR, "failed to init redis cache") \
+            .ctx(url=env.REDIS_CACHE_URL).as_ex(e)
+
+    logger.info("redis cache initialized", max_connections=impl.max_connections)
+    return RedisCacheStore(client)
 ```
 
 ---
 
-## 适配器实现
+## 适配器
 
 ```python
-# backend/runtime_impl/implements/cache_store/impl_redis/redis_adapter.py
+# backend/runtime_impl/implements/cache_store/impl_redis/redis_cache_store.py
 from redis.asyncio import Redis
-from backend.runtime.protocols.cache_store import CacheStore
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
 
-class RedisAdapter:
-    """Redis 适配器，实现 CacheStore Protocol"""
-    
+class RedisCacheStore:
+    """Redis implementation of CacheStore protocol."""
+
     def __init__(self, client: Redis):
         self._client = client
-    
+
     async def get(self, key: str) -> str | None:
-        """获取缓存值"""
-        result = await self._client.get(key)
-        return result.decode() if result else None
-    
+        try:
+            return await self._client.get(key)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis get failed") \
+                .ctx(key=key).as_ex(e)
+
     async def set(self, key: str, value: str, ex: int | None = None) -> bool:
-        """设置缓存值，可选过期时间（秒）"""
-        return await self._client.set(key, value, ex=ex)
-    
-    async def delete(self, key: str) -> bool:
-        """删除缓存键"""
-        return await self._client.delete(key) > 0
-    
-    async def exists(self, key: str) -> bool:
-        """检查键是否存在"""
-        return await self._client.exists(key) > 0
-    
+        try:
+            return bool(await self._client.set(key, value, ex=ex))
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis set failed") \
+                .ctx(key=key, ex=ex).as_ex(e)
+
+    async def delete(self, *keys: str) -> int:
+        try:
+            return await self._client.delete(*keys)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis delete failed") \
+                .ctx(key_count=len(keys)).as_ex(e)
+
+    async def exists(self, *keys: str) -> int:
+        try:
+            return await self._client.exists(*keys)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis exists failed") \
+                .ctx(key_count=len(keys)).as_ex(e)
+
     async def expire(self, key: str, seconds: int) -> bool:
-        """设置键的过期时间"""
-        return await self._client.expire(key, seconds)
-    
-    async def incr(self, key: str) -> int:
-        """递增计数器"""
-        return await self._client.incr(key)
-    
-    async def decr(self, key: str) -> int:
-        """递减计数器"""
-        return await self._client.decr(key)
+        try:
+            return bool(await self._client.expire(key, seconds))
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis expire failed") \
+                .ctx(key=key, seconds=seconds).as_ex(e)
+
+    async def ttl(self, key: str) -> int:
+        try:
+            return await self._client.ttl(key)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis ttl failed") \
+                .ctx(key=key).as_ex(e)
+
+    async def incr(self, key: str, amount: int = 1) -> int:
+        try:
+            return await self._client.incrby(key, amount)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis incr failed") \
+                .ctx(key=key, amount=amount).as_ex(e)
+
+    async def decr(self, key: str, amount: int = 1) -> int:
+        try:
+            return await self._client.decrby(key, amount)
+        except Exception as e:
+            raise Match3Exception.of_code(codes.REDIS_ERROR, "redis decr failed") \
+                .ctx(key=key, amount=amount).as_ex(e)
+
+    async def close(self) -> None:
+        await self._client.aclose()
 ```
 
 ---
 
-## 配置参数
+## 配置与环境
 
-### Config (config.yaml)
+- `config.yaml`：`runtime.cache_store.*`
+- `.env`：`REDIS_CACHE_URL`
 
-```yaml
-runtime:
-  cache_store:
-    provider: redis
-    implementations:
-      redis:
-        max_connections: 50    # 最大连接数
-        socket_timeout: 5      # Socket 超时（秒）
-```
-
-### Env (.env)
-
-```bash
-REDIS_CACHE_URL=redis://localhost:6379/0
-```
-
----
-
-## 相关文档
-
-- **[protocol.md](./protocol.md)** — CacheStore Protocol 定义
-- **[versions/redis-v8.6.2.md](./versions/redis-v8.6.2.md)** — Redis API 详细说明
+详见 [`../config.md`](../config.md)。

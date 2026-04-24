@@ -1,10 +1,13 @@
-# Logger Implementation — Loguru
+# Logger 实现 — Loguru 0.7.3
 
-## 概述
+## 文件布局
 
-使用 **Loguru** 实现 `Logger` Protocol，提供结构化日志记录能力。
-
-**⚠️ 特殊说明**: Logger 不由 Runtime 管理，应在调用 `build_runtime()` **之前**由业务层创建，然后作为参数传入。
+```
+backend/runtime_impl/implements/logger/
+├── logger.py                       # create_logger(config) -> Logger
+└── impl_loguru/
+    └── loguru_logger.py            # LoguruLogger
+```
 
 ---
 
@@ -12,138 +15,101 @@
 
 ```python
 # backend/runtime_impl/implements/logger/logger.py
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
 from backend.config import Config
-from backend.runtime.protocols.logger import Logger, LogConfig
+from backend.runtime.protocols.logger.logger import Logger
+from backend.runtime.protocols.logger.log_config import LogConfig
 from .impl_loguru.loguru_logger import LoguruLogger
 
 def create_logger(config: Config) -> Logger:
-    """创建 Logger 实例 (由业务层调用，不在 build_runtime 中)
-    
-    Args:
-        config: 配置对象
-    
-    Returns:
-        实现了 Logger Protocol 的 LoguruLogger 实例
-    """
+    cfg = config.runtime.logger
     log_config = LogConfig(
-        level=config.runtime.logger.level,
-        format=config.runtime.logger.format,
-        rotation=config.runtime.logger.rotation,
-        retention=config.runtime.logger.retention,
-        log_file="logs/match3-wiki.log"
+        level=cfg.level,
+        format=cfg.format,
+        rotation=cfg.rotation,
+        retention=cfg.retention,
+        log_file=cfg.log_file,
     )
-    return LoguruLogger(log_config)
+    try:
+        return LoguruLogger(log_config)
+    except Exception as e:
+        raise Match3Exception.of("failed to initialize logger") \
+            .ctx(level=cfg.level, log_file=cfg.log_file).as_ex(e)
 ```
 
 ---
 
-## 适配器实现
+## 适配器
 
 ```python
 # backend/runtime_impl/implements/logger/impl_loguru/loguru_logger.py
 import sys
-from loguru import logger as loguru_logger
-from backend.runtime.protocols.logger import Logger, LogConfig
+from loguru import logger as _loguru
+from backend.runtime.protocols.logger.log_config import LogConfig
+
+_JSON_FORMAT = (
+    '{{"time":"{time:YYYY-MM-DD HH:mm:ss.SSS}",'
+    '"level":"{level}","file":"{file}","line":{line},'
+    '"message":{message!r}}}'
+)
+
+_TEXT_FORMAT = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+    "<level>{level: <8}</level> | "
+    "<cyan>{name}:{function}:{line}</cyan> | "
+    "<level>{message}</level>"
+)
 
 class LoguruLogger:
-    """Loguru 适配器，实现 Logger Protocol"""
-    
+    """Loguru-backed implementation of Logger protocol."""
+
     def __init__(self, config: LogConfig):
-        self._logger = loguru_logger
-        self._config = config
-        self._configure()
-    
-    def _configure(self) -> None:
-        """根据配置初始化 loguru"""
-        # 移除默认 handler
+        self._logger = _loguru
+        self._configure(config)
+
+    def _configure(self, config: LogConfig) -> None:
         self._logger.remove()
-        
-        # 确定格式
-        if self._config.format == "json":
-            log_format = (
-                "{"
-                '"time": "{time:YYYY-MM-DD HH:mm:ss.SSS}", '
-                '"level": "{level}", '
-                '"message": "{message}", '
-                '"file": "{file}", '
-                '"line": {line}'
-                "}"
-            )
-        else:  # text 格式
-            log_format = (
-                "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-                "<level>{level: <8}</level> | "
-                "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-                "<level>{message}</level>"
-            )
-        
-        # 添加控制台 handler
+        fmt = _JSON_FORMAT if config.format == "json" else _TEXT_FORMAT
+
         self._logger.add(
             sys.stderr,
-            format=log_format,
-            level=self._config.level,
-            colorize=(self._config.format == "text")
+            format=fmt,
+            level=config.level,
+            colorize=(config.format == "text"),
+            enqueue=True,
         )
-        
-        # 添加文件 handler
-        if self._config.log_file:
+        if config.log_file:
             self._logger.add(
-                self._config.log_file,
-                format=log_format,
-                level=self._config.level,
-                rotation=self._config.rotation,
-                retention=self._config.retention,
-                compression="zip"
+                config.log_file,
+                format=fmt,
+                level=config.level,
+                rotation=config.rotation,
+                retention=config.retention,
+                compression="zip",
+                enqueue=True,
             )
-    
-    def debug(self, message: str, **kwargs):
-        self._logger.debug(message, **kwargs)
-    
-    def info(self, message: str, **kwargs):
-        self._logger.info(message, **kwargs)
-    
-    def warning(self, message: str, **kwargs):
-        self._logger.warning(message, **kwargs)
-    
-    def error(self, message: str, **kwargs):
-        self._logger.error(message, **kwargs)
-    
-    def critical(self, message: str, **kwargs):
-        self._logger.critical(message, **kwargs)
-    
-    def exception(self, message: str, **kwargs):
-        self._logger.exception(message, **kwargs)
+
+    def debug(self, message: str, **kwargs): self._logger.bind(**kwargs).debug(message)
+    def info(self, message: str, **kwargs): self._logger.bind(**kwargs).info(message)
+    def warning(self, message: str, **kwargs): self._logger.bind(**kwargs).warning(message)
+    def error(self, message: str, **kwargs): self._logger.bind(**kwargs).error(message)
+    def critical(self, message: str, **kwargs): self._logger.bind(**kwargs).critical(message)
+    def exception(self, message: str, **kwargs): self._logger.bind(**kwargs).exception(message)
 ```
+
+- 使用 `bind(**kwargs)` 把结构化字段附加到当前记录；`json` 格式时所有字段会写入 `extra`。
+- `enqueue=True` 让写入在独立线程内异步完成，不阻塞业务协程。
 
 ---
 
-## 配置参数
+## 配置与环境
 
-### Config (config.yaml)
-
-```yaml
-runtime:
-  logger:
-    level: INFO              # 日志级别: DEBUG/INFO/WARNING/ERROR
-    format: json             # 格式: json/text
-    rotation: 1 day          # 轮转周期
-    retention: 7 days        # 保留时长
-```
-
-### 日志格式示例
-
-**JSON 格式**:
-```json
-{"time": "2024-01-15 10:23:45.123", "level": "INFO", "message": "Processing document 123", "file": "processor.py", "line": 45}
-```
-
-**Text 格式**:
-```
-2024-01-15 10:23:45.123 | INFO     | processor:process:45 | Processing document 123
-```
+- `config.yaml` 中的 `runtime.logger.*` 字段定义见 [`../config.md`](../config.md)。
+- Logger 不读取 `.env`。
 
 ---
 
-## 相关文档
+## 报错
 
-- **[protocol.md](./protocol.md)** — Logger Protocol 定义
+Logger 一般不在运行期抛错；初始化失败在工厂函数中兜底，其它 `exception()` 用法已在 Protocol 文档示例中。

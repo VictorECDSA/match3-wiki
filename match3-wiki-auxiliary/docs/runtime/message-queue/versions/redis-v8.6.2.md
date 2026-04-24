@@ -294,29 +294,6 @@ async for message in pubsub.listen():
         print(message["data"])
 ```
 
-### 10. Runtime Interface (Match3 Project)
-
-```python
-from typing import Protocol
-from redis.asyncio import Redis
-
-class IRedisClient(Protocol):
-    """Redis client interface for dependency injection"""
-    
-    async def get(self, key: str) -> str | None: ...
-    async def set(self, key: str, value: str, ex: int | None = None) -> bool: ...
-    async def delete(self, *keys: str) -> int: ...
-    async def hget(self, name: str, key: str) -> str | None: ...
-    async def hgetall(self, name: str) -> dict[str, str]: ...
-    async def hset(self, name: str, key: str, value: str) -> int: ...
-    async def zadd(self, name: str, mapping: dict[str, float]) -> int: ...
-    async def zrange(self, name: str, start: int, end: int, withscores: bool = False) -> list: ...
-    async def expire(self, name: str, time: int) -> bool: ...
-    async def pipeline(self, transaction: bool = True) -> Redis: ...
-```
-
----
-
 ## Detailed Interface Usage
 
 ### 1. Client Connection
@@ -827,111 +804,9 @@ async for message in pubsub.listen():
 
 ---
 
-### 10. Runtime Integration (Match3 Project)
+### Runtime Integration (Match3 Project)
 
-#### Runtime Interface Implementation
-
-```python
-from redis.asyncio import Redis
-from typing import Protocol
-
-class IRedisClient(Protocol):
-    """Redis client interface for dependency injection"""
-    async def get(self, key: str) -> str | None: ...
-    async def set(self, key: str, value: str, ex: int | None = None) -> bool: ...
-    async def hgetall(self, name: str) -> dict[str, str]: ...
-    # ... other methods
-
-async def build_redis_client(config: RedisConfig) -> IRedisClient:
-    """Build Redis client from config"""
-    return await Redis(
-        host=config.host,
-        port=config.port,
-        db=config.db,
-        password=config.password,
-        decode_responses=True,
-        max_connections=config.max_connections,
-        socket_timeout=config.socket_timeout
-    )
-```
-
-#### Injecting into Runtime
-
-```python
-from dataclasses import dataclass
-
-@dataclass(frozen=True)
-class Match3Runtime:
-    """Runtime dependency container (immutable)"""
-    
-    redis_client: IRedisClient  # Redis client interface
-    # ... other dependencies
-
-async def build_runtime(config: Config) -> Match3Runtime:
-    """Build runtime with all dependencies"""
-    
-    redis_client = await build_redis_client(config.redis)
-    
-    return Match3Runtime(
-        redis_client=redis_client,
-        # ... other dependencies
-    )
-```
-
-#### Usage in Repository (Cache Layer)
-
-```python
-import json
-from typing import Any
-
-class CacheRepository:
-    """Repository for caching with Redis"""
-    
-    def __init__(self, runtime: Match3Runtime):
-        self._redis = runtime.redis_client
-        self._default_ttl = 300  # 5 minutes
-    
-    async def get_cached(self, key: str) -> Any | None:
-        """Get cached value"""
-        data = await self._redis.get(key)
-        if data:
-            return json.loads(data)
-        return None
-    
-    async def set_cached(
-        self,
-        key: str,
-        value: Any,
-        ttl: int | None = None
-    ):
-        """Set cached value with TTL"""
-        data = json.dumps(value)
-        await self._redis.set(
-            key,
-            data,
-            ex=ttl or self._default_ttl
-        )
-    
-    async def get_or_compute(
-        self,
-        key: str,
-        compute_fn: callable,
-        ttl: int | None = None
-    ) -> Any:
-        """Get from cache or compute and cache"""
-        
-        # Try cache first
-        cached = await self.get_cached(key)
-        if cached is not None:
-            return cached
-        
-        # Cache miss, compute value
-        value = await compute_fn()
-        await self.set_cached(key, value, ttl)
-        return value
-```
-
----
+> See the corresponding `protocol.md` and `implementation.md` under the component directory for the authoritative interface and adapter definition.
 
 ## Why Redis v8.4.2?
 
@@ -973,37 +848,6 @@ class CacheRepository:
 - Complex queries (use Elasticsearch)
 - Large binary data (use MinIO)
 - Complex relationships (use Neo4j)
-
----
-
-## Integration with Match3 Architecture
-
-```
-┌─────────────────────────────────────────────────┐
-│                  FastAPI Layer                  │
-│              (Cache Middleware)                 │
-└────────────────┬────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────┐
-│            CacheRepository                      │
-│  - get_cached()                                 │
-│  - set_cached()                                 │
-│  - get_or_compute()                             │
-└────────────────┬────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────┐
-│         Match3Runtime.redis_client              │
-│       (IRedisClient Protocol)                   │
-└────────────────┬────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────┐
-│              Redis Server                       │
-│         (v8.4.2, In-Memory Cache)               │
-└─────────────────────────────────────────────────┘
-```
 
 ---
 

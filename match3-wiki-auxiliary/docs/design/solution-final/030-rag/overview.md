@@ -20,20 +20,20 @@ RAG 模块分为两条完全独立的流程——**索引流程**（离线，文
 原始文档（PDF / DOCX / HTML / MD）
     │
     ▼
-[1] 格式转 Markdown
-    │
+[1] 格式转 Markdown                               ┐
+    │                                             │ chunking.md
+    ▼                                             │
+[2] 切块策略（markdown_header 或 fixed_size）      │
+    │                                             │
+    ▼                                             │
+[3] Parent-Child 分层（必须应用）                  │
+    │ child（300 字）携带 parent_id                │
+    │ 查询命中 child → 返回 parent（1500 字）上下文 ┘
     ▼
-[2] 切块策略（markdown_header 或 fixed_size）
-    │
-    ▼
-[3] Parent-Child 索引层（必须应用）
-    │ child（300 字）建向量索引，携带 parent_id
-    │ 查询命中 child → 返回 parent（1500 字）上下文
-    ▼
-[4] 三路并行建索引
-    ├── Dense + Sparse Embedding → Milvus
-    ├── 原文 + metadata → Elasticsearch（BM25）
-    └── LLM 实体抽取 → Neo4j（可选，graph=True 时启用）
+[4] 三路并行建索引                                 ┐
+    ├── embed_task: Dense + Sparse → Milvus       │ indexing.md
+    ├── embed_task: 原文 + metadata → ES（BM25）   │
+    └── graph_task: LLM 实体抽取 → Neo4j（可选）   ┘
 ```
 
 Wiki 页面的索引流程独立，走 OpenKB 五步编译流水线——见 `030-rag/processing/wiki-compile.md`。
@@ -74,7 +74,8 @@ LLM 生成（SSE 流式输出）
 
 | 文件 | 内容 |
 |------|------|
-| `030-rag/processing/chunking.md` | 文档转 Markdown、切块策略、Parent-Child 索引层、三路建索引 |
+| `030-rag/processing/chunking.md` | 文档转 Markdown、切块策略（markdown_header / fixed_size）、Parent-Child 分层 |
+| `030-rag/processing/indexing.md` | 三路并行建索引：Milvus（Dense+Sparse）、Elasticsearch（BM25）、Neo4j（图谱，可选） |
 | `030-rag/processing/wiki-compile.md` | OpenKB 五步 Wiki 编译流水线、WikiCompileService、compile_topic 任务 |
 
 ### 检索流程

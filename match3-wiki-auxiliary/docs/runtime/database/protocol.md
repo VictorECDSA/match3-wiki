@@ -1,249 +1,123 @@
 # DatabaseEngine Protocol
 
-> **功能**: PostgreSQL 数据访问层 (ORM)  
-> **推荐实现**: SQLAlchemy v2.0.48 (2026-03-02)  
-> **Runtime 接口**: `rt.db: DatabaseEngine` (Protocol)
-
-## 📚 相关文档
-
-- **上级文档**: [runtime.md](../runtime.md) - Runtime 系统总览和 Protocol 设计理念
-- **实现方案**: [implementation.md](./implementation.md) - SQLAlchemy 适配器实现和配置说明
-- **版本技术文档**: [versions/](./versions/) - 具体实现库的详细 API 文档
-  - [SQLAlchemy v2.0.48](./versions/sqlalchemy-v2.0.48.md) - 推荐实现
+- **功能**：关系型数据库访问（连接池 + 事务 + SQL 执行）
+- **推荐实现**：PostgreSQL 18 + SQLAlchemy 2.0.48（驱动 psycopg2）
+- **Runtime 字段**：`rt.db: DatabaseEngine`
+- **错误码**：失败时抛 `Match3Exception.of_code(codes.DB_ERROR, ...)` (500001)
 
 ---
 
-## Protocol 定义
+## 类清单
 
-### 接口说明
+| 类 | 文件 | 类型 |
+|----|------|------|
+| `DatabaseEngine` | `backend/runtime/protocols/database/database_engine.py` | Protocol |
+| `DatabaseSession` | `backend/runtime/protocols/database/database_session.py` | Protocol |
 
-`DatabaseEngine` 提供关系型数据库访问能力,用于:
-- **数据持久化**: 应用数据的 CRUD 操作
-- **事务管理**: ACID 事务保证数据一致性
-- **ORM 集成**: 与 SQLAlchemy ORM 模型配合使用
+---
 
-### 主接口定义
+## DatabaseEngine
 
 ```python
+# backend/runtime/protocols/database/database_engine.py
 from typing import Protocol, ContextManager
+from .database_session import DatabaseSession
 
 class DatabaseEngine(Protocol):
-    """数据库引擎抽象接口 (不依赖任何 ORM)"""
-    
-    def session(self) -> ContextManager[DatabaseSession]:
-        """创建数据库会话的上下文管理器
-        
-        Returns:
-            会话上下文管理器,退出时自动提交或回滚
-        """
-        ...
-    
-    def dispose(self) -> None:
-        """释放连接池资源"""
-        ...
+    """Relational database engine protocol."""
+
+    def session(self) -> ContextManager[DatabaseSession]: ...
+
+    def dispose(self) -> None: ...
 ```
 
-### 会话 Protocol
+| 方法 | 参数 | 返回 |
+|------|------|------|
+| `session` | — | `ContextManager[DatabaseSession]`，正常退出 `commit`，异常退出 `rollback`，最后自动 `close` |
+| `dispose` | — | `None`，释放底层连接池 |
+
+---
+
+## DatabaseSession
 
 ```python
+# backend/runtime/protocols/database/database_session.py
 from typing import Protocol, Any
 
 class DatabaseSession(Protocol):
-    """数据库会话抽象接口 (不依赖任何 ORM)"""
-    
-    def execute(self, query: str, params: dict[str, Any] | None = None) -> Any:
-        """执行 SQL 查询
-        
-        Args:
-            query: SQL 查询语句
-            params: 查询参数 (可选)
-            
-        Returns:
-            查询结果 (具体类型由实现决定)
-        """
-        ...
-    
-    def add(self, entity: Any) -> None:
-        """将实体添加到会话 (待提交)
-        
-        Args:
-            entity: 要添加的实体对象
-        """
-        ...
-    
-    def commit(self) -> None:
-        """提交当前事务"""
-        ...
-    
-    def rollback(self) -> None:
-        """回滚当前事务"""
-        ...
-    
-    def close(self) -> None:
-        """关闭会话"""
-        ...
+    """Unit-of-work session protocol."""
+
+    def execute(
+        self,
+        query: str,
+        params: dict[str, Any] | None = None,
+    ) -> Any: ...
+
+    def add(self, entity: Any) -> None: ...
+
+    def delete(self, entity: Any) -> None: ...
+
+    def flush(self) -> None: ...
+
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
+
+    def close(self) -> None: ...
 ```
+
+### 方法签名
+
+| 方法 | 参数 | 返回 | 说明 |
+|------|------|------|------|
+| `execute` | `query: str`（SQL 文本或表达式）, `params: dict \| None` | 驱动原生 `Result` | 参数用 `:name` 占位符绑定 |
+| `add` | `entity: Any` | `None` | 将 ORM 对象加入 UoW |
+| `delete` | `entity: Any` | `None` | 标记删除 |
+| `flush` | — | `None` | 写入但不提交事务 |
+| `commit` / `rollback` | — | `None` | 事务控制 |
+| `close` | — | `None` | 释放会话 |
+
+### 使用约束
+
+- **禁止返回驱动专用类型穿越业务边界**：业务层不得依赖 `sqlalchemy.Result` 的类型，需要结果时通过 ORM 实体或显式字典返回。
+- **ORM 模型**定义在 `backend/app/storage/models/` 下（详见 `design/solution-final/010-architecture/directory-structure.md`）。
+- **`session()` 上下文管理器** 必须是业务代码访问数据库的唯一入口。
 
 ---
 
 ## 使用示例
 
-### 业务代码 (创建实体)
-
 ```python
-from runtime import Runtime
+from sqlalchemy import text
 
-def create_user(rt: Runtime, username: str, email: str) -> None:
-    """创建用户 (不知道底层是 SQLAlchemy 还是其他 ORM)"""
-    
-    with rt.db.session() as session:
-        user = User(username=username, email=email)
-        session.add(user)
-        # 退出 with 块时自动提交
-```
-
-### 业务代码 (查询)
-
-```python
-def get_user_by_id(rt: Runtime, user_id: int) -> dict | None:
-    """根据 ID 查询用户"""
-    
-    with rt.db.session() as session:
-        result = session.execute(
-            "SELECT * FROM users WHERE id = :user_id",
-            params={"user_id": user_id},
-        )
-        
-        row = result.fetchone()
-        if row:
-            return dict(row)
-        return None
-```
-
-### 业务代码 (事务)
-
-```python
-def transfer_balance(rt: Runtime, from_user: int, to_user: int, amount: float) -> None:
-    """转账操作 (事务保证原子性)"""
-    
-    with rt.db.session() as session:
-        try:
-            # 扣除发送者余额
-            session.execute(
-                "UPDATE users SET balance = balance - :amount WHERE id = :user_id",
-                params={"amount": amount, "user_id": from_user},
-            )
-            
-            # 增加接收者余额
-            session.execute(
-                "UPDATE users SET balance = balance + :amount WHERE id = :user_id",
-                params={"amount": amount, "user_id": to_user},
-            )
-            
-            # 自动提交 (退出 with 块时)
-        except Exception:
-            # 自动回滚 (异常时)
-            raise
-```
-
-### 单元测试
-
-```python
-from unittest.mock import MagicMock
-from runtime import Runtime
-
-def test_create_user():
-    # Mock 数据库接口
-    mock_session = MagicMock()
-    mock_engine = MagicMock()
-    mock_engine.session.return_value.__enter__.return_value = mock_session
-    
-    # 创建测试 Runtime
-    rt = Runtime(
-        cache=MagicMock(),
-        queue=MagicMock(),
-        vector_db=MagicMock(),
-        graph_db=MagicMock(),
-        db=mock_engine,
-        search=MagicMock(),
-        storage=MagicMock(),
+# 原生 SQL
+with rt.db.session() as s:
+    result = s.execute(
+        text("SELECT id, name FROM workspaces WHERE id = :wid"),
+        {"wid": workspace_id},
     )
-    
-    # 测试业务逻辑
-    create_user(rt, "alice", "alice@example.com")
-    
-    # 验证调用
-    mock_session.add.assert_called_once()
+    row = result.first()
+
+# ORM 插入（单一 UoW 内自动提交）
+with rt.db.session() as s:
+    workspace = Workspace(name=name, owner_id=owner_id)
+    s.add(workspace)
+    # 退出 with：commit 成功；异常自动 rollback
+
+# 错误包装
+try:
+    with rt.db.session() as s:
+        s.execute(text("UPDATE ..."), params)
+except Exception as e:
+    raise Match3Exception.of_code(codes.DB_ERROR, "update failed") \
+        .ctx(workspace_id=workspace_id).as_ex(e)
 ```
 
 ---
 
-## 设计说明
+## 关联文档
 
-### 抽象粒度
-
-- ✅ **好的抽象**: `execute(query: str, params: dict)` (通用)
-- ❌ **过度抽象**: `execute(query: SQLAlchemyQuery)` (依赖具体库)
-
-### 返回值类型
-
-Protocol 的返回值应尽量使用:
-- 基础类型 (`str`, `int`, `bool`)
-- 标准库类型 (`dict`, `list`)
-- 自定义领域模型 (不依赖 ORM)
-
-避免返回 SQLAlchemy 特有类型 (如 `Result`、`Row`)。
-
-### 类型检查
-
-推荐使用 Pyright 或 mypy 进行静态类型检查:
-
-```bash
-# 检查 Runtime 是否只依赖 Protocol
-pyright --verifytypes runtime
-```
-
----
-
-## 扩展性
-
-### 切换到 Django ORM
-
-```python
-class DjangoORMAdapter:
-    """Django ORM 适配器 (实现 DatabaseEngine Protocol)"""
-    
-    @contextmanager
-    def session(self):
-        # Django 使用 transaction.atomic()
-        from django.db import transaction
-        with transaction.atomic():
-            yield DjangoSessionAdapter()
-    
-    def dispose(self):
-        from django.db import connection
-        connection.close()
-```
-
-**无需修改 Runtime 或业务代码！**
-
-### 添加新方法
-
-如果需要添加查询方法:
-
-```python
-class DatabaseSession(Protocol):
-    # ... 原有方法 ...
-    
-    def query(self, model: type) -> Any:
-        """查询特定模型 (可选方法)"""
-        ...
-```
-
-已有代码继续兼容 (Protocol 支持渐进式扩展)。
-
----
-
-**创建时间**: 2026-04-23  
-**最后更新**: 2026-04-23  
-**版本**: 2.0
+- [implementation.md](./implementation.md) — PostgreSQL + SQLAlchemy 适配器
+- [versions/sqlalchemy-v2.0.48.md](./versions/sqlalchemy-v2.0.48.md) — SQLAlchemy 2.0 接口速查
+- [../config.md](../config.md) — `runtime.database.*` 配置
+- [`../../design/solution-final/050-data-model/`](../../design/solution-final/050-data-model/) — ORM 模型与 Alembic 迁移

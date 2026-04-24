@@ -1,8 +1,16 @@
-# Database Implementation — PostgreSQL + SQLAlchemy
+# DatabaseEngine 实现 — PostgreSQL 18 + SQLAlchemy 2.0.48
 
-## 概述
+## 文件布局
 
-使用 **PostgreSQL** 作为关系型数据库，通过 **SQLAlchemy 2.0** 提供数据访问能力。
+```
+backend/runtime_impl/implements/database/
+├── database.py                     # create_database_engine(config, env, logger) -> DatabaseEngine
+└── impl_postgresql/
+    ├── postgresql_engine.py        # PostgreSQLEngine
+    └── postgresql_session.py       # PostgreSQLSession
+```
+
+依赖：`SQLAlchemy` 2.0.48，驱动 `psycopg2-binary`。
 
 ---
 
@@ -11,115 +19,154 @@
 ```python
 # backend/runtime_impl/implements/database/database.py
 from sqlalchemy import create_engine
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
 from backend.config import Config, Env
-from backend.runtime.protocols.logger import Logger
-from backend.runtime.protocols.database import DatabaseEngine
-from .impl_postgresql.postgresql_adapter import PostgreSQLEngine
+from backend.runtime.protocols.logger.logger import Logger
+from backend.runtime.protocols.database.database_engine import DatabaseEngine
+from .impl_postgresql.postgresql_engine import PostgreSQLEngine
 
 def create_database_engine(config: Config, env: Env, logger: Logger) -> DatabaseEngine:
-    """创建 DatabaseEngine 实例
-    
-    Args:
-        config: 配置对象
-        env: 环境变量
-        logger: 日志记录器
-    
-    Returns:
-        实现了 DatabaseEngine Protocol 的 PostgreSQLEngine 实例
-    
-    Raises:
-        ValueError: provider 不支持时抛出
-    """
     provider = config.runtime.database.provider
-    
-    if provider == "postgresql":
-        postgres_url = (
-            f"postgresql+psycopg2://{env.POSTGRESQL_USER}:{env.POSTGRESQL_PASSWORD}"
-            f"@{env.POSTGRESQL_HOST}:{env.POSTGRESQL_PORT}/{env.POSTGRESQL_DB}"
+
+    if provider != "postgresql":
+        raise Match3Exception.of_code(
+            codes.CONFIG_MISSING_REQUIRED,
+            "unsupported database provider",
+        ).ctx(provider=provider)
+
+    impl = config.runtime.database.implementations.postgresql
+    url = (
+        f"postgresql+psycopg2://{env.POSTGRESQL_USER}:{env.POSTGRESQL_PASSWORD}"
+        f"@{env.POSTGRESQL_HOST}:{env.POSTGRESQL_PORT}/{env.POSTGRESQL_DB}"
+    )
+    try:
+        engine = create_engine(
+            url,
+            pool_size=impl.pool_size,
+            max_overflow=impl.max_overflow,
+            pool_timeout=impl.pool_timeout,
+            pool_recycle=impl.pool_recycle,
+            pool_pre_ping=impl.pool_pre_ping,
+            echo=impl.echo,
         )
-        
-        db_engine = create_engine(
-            postgres_url,
-            pool_size=config.runtime.database.implementations.postgresql.pool_size,
-            max_overflow=config.runtime.database.implementations.postgresql.max_overflow,
-            pool_timeout=config.runtime.database.implementations.postgresql.pool_timeout,
-            pool_recycle=config.runtime.database.implementations.postgresql.pool_recycle,
-            pool_pre_ping=True,  # 自动检测失效连接
-        )
-        
-        logger.info(f"PostgreSQL engine initialized (pool_size: {config.runtime.database.implementations.postgresql.pool_size})")
-        return PostgreSQLEngine(db_engine)
-    else:
-        raise ValueError(f"Unsupported database provider: {provider}")
+    except Exception as e:
+        raise Match3Exception.of_code(codes.DB_ERROR, "failed to init postgres engine") \
+            .ctx(host=env.POSTGRESQL_HOST, db=env.POSTGRESQL_DB).as_ex(e)
+
+    logger.info(
+        "postgresql engine initialized",
+        pool_size=impl.pool_size, host=env.POSTGRESQL_HOST, db=env.POSTGRESQL_DB,
+    )
+    return PostgreSQLEngine(engine)
 ```
 
 ---
 
-## 适配器实现
+## 引擎适配器
 
 ```python
-# backend/runtime_impl/implements/database/impl_postgresql/postgresql_adapter.py
+# backend/runtime_impl/implements/database/impl_postgresql/postgresql_engine.py
+from contextlib import contextmanager
+from typing import ContextManager
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
-from backend.runtime.protocols.database import DatabaseEngine
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
+from backend.runtime.protocols.database.database_session import DatabaseSession
+from .postgresql_session import PostgreSQLSession
 
 class PostgreSQLEngine:
-    """PostgreSQL + SQLAlchemy 适配器，实现 DatabaseEngine Protocol"""
-    
+    """PostgreSQL + SQLAlchemy implementation of DatabaseEngine protocol."""
+
     def __init__(self, engine: Engine):
         self._engine = engine
-    
-    def get_session(self) -> Session:
-        """获取数据库会话
-        
-        使用示例:
-        with rt.db.get_session() as session:
-            # 执行数据库操作
-            session.commit()
-        """
-        return Session(self._engine)
-    
-    def execute(self, query: str, params: dict | None = None):
-        """执行原生 SQL 查询"""
-        with self._engine.connect() as conn:
-            return conn.execute(query, params or {})
-    
-    def dispose(self):
-        """释放连接池"""
+
+    @contextmanager
+    def session(self) -> ContextManager[DatabaseSession]:
+        sa_session = Session(self._engine)
+        try:
+            yield PostgreSQLSession(sa_session)
+            sa_session.commit()
+        except Match3Exception:
+            sa_session.rollback()
+            raise
+        except Exception as e:
+            sa_session.rollback()
+            raise Match3Exception.of_code(codes.DB_ERROR, "db session failed").as_ex(e)
+        finally:
+            sa_session.close()
+
+    def dispose(self) -> None:
         self._engine.dispose()
 ```
 
 ---
 
-## 配置参数
+## 会话适配器
 
-### Config (config.yaml)
+```python
+# backend/runtime_impl/implements/database/impl_postgresql/postgresql_session.py
+from typing import Any
+from sqlalchemy import text
+from sqlalchemy.orm import Session as SASession
+from app.common.exceptions import Match3Exception
+from app.common.constants import codes
 
-```yaml
-runtime:
-  database:
-    provider: postgresql
-    implementations:
-      postgresql:
-        pool_size: 10          # 连接池大小
-        max_overflow: 20       # 最大溢出连接数
-        pool_timeout: 30       # 连接超时（秒）
-        pool_recycle: 3600     # 连接回收时间（秒）
+class PostgreSQLSession:
+    """SQLAlchemy Session wrapper implementing DatabaseSession protocol."""
+
+    def __init__(self, session: SASession):
+        self._session = session
+
+    def execute(self, query: str, params: dict[str, Any] | None = None) -> Any:
+        try:
+            stmt = text(query) if isinstance(query, str) else query
+            return self._session.execute(stmt, params or {})
+        except Exception as e:
+            raise Match3Exception.of_code(codes.DB_ERROR, "sql execute failed") \
+                .ctx(param_keys=list((params or {}).keys())).as_ex(e)
+
+    def add(self, entity: Any) -> None:
+        self._session.add(entity)
+
+    def delete(self, entity: Any) -> None:
+        self._session.delete(entity)
+
+    def flush(self) -> None:
+        try:
+            self._session.flush()
+        except Exception as e:
+            raise Match3Exception.of_code(codes.DB_ERROR, "flush failed").as_ex(e)
+
+    def commit(self) -> None:
+        try:
+            self._session.commit()
+        except Exception as e:
+            raise Match3Exception.of_code(codes.DB_ERROR, "commit failed").as_ex(e)
+
+    def rollback(self) -> None:
+        self._session.rollback()
+
+    def close(self) -> None:
+        self._session.close()
 ```
 
-### Env (.env)
-
-```bash
-POSTGRESQL_HOST=localhost
-POSTGRESQL_PORT=5432
-POSTGRESQL_DB=match3
-POSTGRESQL_USER=match3_user
-POSTGRESQL_PASSWORD=your_secure_password
-```
+> 说明：`PostgreSQLEngine.session()` 已经提供事务边界；业务层一般用 `with rt.db.session() as s: s.add(...)` 的方式即可，无需手动 `commit()`。显式事务 API 依然保留，供需要手工控制提交点的场景使用。
 
 ---
 
-## 相关文档
+## 配置与环境
 
-- **[protocol.md](./protocol.md)** — DatabaseEngine Protocol 定义
-- **[../../design/solution-final/050-data-model/](../../design/solution-final/050-data-model/)** — 数据模型设计（ORM 模型、迁移脚本等）
+- `config.yaml`：`runtime.database.*`
+- `.env`：`POSTGRESQL_HOST`、`POSTGRESQL_PORT`、`POSTGRESQL_DB`、`POSTGRESQL_USER`、`POSTGRESQL_PASSWORD`
+
+详见 [`../config.md`](../config.md)。
+
+---
+
+## 关联文档
+
+- [protocol.md](./protocol.md) — DatabaseEngine / DatabaseSession Protocol
+- [versions/sqlalchemy-v2.0.48.md](./versions/sqlalchemy-v2.0.48.md) — SQLAlchemy 2.0 接口速查
+- [`../../design/solution-final/050-data-model/`](../../design/solution-final/050-data-model/) — ORM 模型与 Alembic 迁移

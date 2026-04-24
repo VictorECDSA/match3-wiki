@@ -28,7 +28,7 @@
 | # | 步骤 | 说明 |
 |---|------|------|
 | 1 | 创建/更新 WikiPage 记录 | `find_by_topic` 若存在则复用，否则新建；状态设为 `COMPILING` |
-| 2 | 运行五步流水线 | `run_compile_pipeline(rt, topic, workspace_id)` — 详见 `030-rag/wiki-lookup.md` |
+| 2 | 运行五步流水线 | `run_compile_pipeline(rt, topic, workspace_id)` — 详见 `030-rag/processing/wiki-compile.md` |
 | 3 | 写回结果 | `page.status = PUBLISHED`，写入 `title / category / content / source_chunk_ids / compiled_at` |
 | 4 | 失败回写 | `Match3Exception`：`FAILED` + `raise`（不重试）；其他异常：`FAILED` + `retry()`（最多 2 次）|
 

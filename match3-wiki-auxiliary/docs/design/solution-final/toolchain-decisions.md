@@ -93,7 +93,7 @@ llm-wiki 是本地命令行工具，适合单人在本机批量生成静态 Mark
 
 **若要集成进来，需要这样调整**：
 
-llm-wiki 的五步编译管线（收集上下文 → 摘要 → 概念规划 → 并行章节生成 → 交叉链接）与 `030-rag/wiki-lookup.md` 中自研的 OpenKB 流程高度同构。若要引入 llm-wiki 作为编译引擎：
+llm-wiki 的五步编译管线（收集上下文 → 摘要 → 概念规划 → 并行章节生成 → 交叉链接）与 `030-rag/processing/wiki-compile.md` 中自研的 OpenKB 流程高度同构。若要引入 llm-wiki 作为编译引擎：
 
 1. 将 llm-wiki 封装为 `wiki_compile_task` 内的一个调用，输入 `workspace_id + topic + chunks`，输出 Markdown 字符串
 2. 将 llm-wiki 的文件系统输出（写 `.md` 文件）改为写入 `t_wiki_pages.f_content`

@@ -22,36 +22,6 @@
 - **临时访问**: 生成预签名 URL 供临时下载
 - **文件管理**: 列出、复制、删除对象
 
-### 存储对象元数据 Protocol
-
-```python
-from typing import Protocol
-from datetime import datetime
-
-class StorageObject(Protocol):
-    """存储对象元数据"""
-    
-    @property
-    def key(self) -> str:
-        """对象键 (路径)"""
-        ...
-    
-    @property
-    def size(self) -> int:
-        """对象大小 (字节)"""
-        ...
-    
-    @property
-    def last_modified(self) -> datetime:
-        """最后修改时间"""
-        ...
-    
-    @property
-    def etag(self) -> str:
-        """对象的 ETag (用于校验)"""
-        ...
-```
-
 ### 主接口定义
 
 ```python
@@ -184,6 +154,36 @@ class ObjectStorage(Protocol):
         Returns:
             目标对象的 ETag
         """
+        ...
+```
+
+### 存储对象元数据 Protocol
+
+```python
+from typing import Protocol
+from datetime import datetime
+
+class StorageObject(Protocol):
+    """存储对象元数据"""
+    
+    @property
+    def key(self) -> str:
+        """对象键 (路径)"""
+        ...
+    
+    @property
+    def size(self) -> int:
+        """对象大小 (字节)"""
+        ...
+    
+    @property
+    def last_modified(self) -> datetime:
+        """最后修改时间"""
+        ...
+    
+    @property
+    def etag(self) -> str:
+        """对象的 ETag (用于校验)"""
         ...
 ```
 

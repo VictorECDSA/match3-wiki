@@ -22,30 +22,6 @@
 - **聚合分析**: 文档统计和聚合查询
 - **混合检索**: 与向量搜索结合的 Hybrid Search
 
-### 搜索结果 Protocol
-
-```python
-from typing import Protocol, Any
-
-class SearchResult(Protocol):
-    """搜索结果 (单条)"""
-    
-    @property
-    def id(self) -> str:
-        """文档 ID"""
-        ...
-    
-    @property
-    def score(self) -> float:
-        """相关性分数"""
-        ...
-    
-    @property
-    def source(self) -> dict[str, Any]:
-        """文档源数据"""
-        ...
-```
-
 ### 主接口定义
 
 ```python
@@ -144,6 +120,30 @@ class FullTextSearch(Protocol):
     
     def close(self) -> None:
         """关闭连接"""
+        ...
+```
+
+### 搜索结果 Protocol
+
+```python
+from typing import Protocol, Any
+
+class SearchResult(Protocol):
+    """搜索结果 (单条)"""
+    
+    @property
+    def id(self) -> str:
+        """文档 ID"""
+        ...
+    
+    @property
+    def score(self) -> float:
+        """相关性分数"""
+        ...
+    
+    @property
+    def source(self) -> dict[str, Any]:
+        """文档源数据"""
         ...
 ```
 

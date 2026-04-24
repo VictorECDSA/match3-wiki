@@ -22,6 +22,27 @@
 - **事务管理**: ACID 事务保证数据一致性
 - **ORM 集成**: 与 SQLAlchemy ORM 模型配合使用
 
+### 主接口定义
+
+```python
+from typing import Protocol, ContextManager
+
+class DatabaseEngine(Protocol):
+    """数据库引擎抽象接口 (不依赖任何 ORM)"""
+    
+    def session(self) -> ContextManager[DatabaseSession]:
+        """创建数据库会话的上下文管理器
+        
+        Returns:
+            会话上下文管理器,退出时自动提交或回滚
+        """
+        ...
+    
+    def dispose(self) -> None:
+        """释放连接池资源"""
+        ...
+```
+
 ### 会话 Protocol
 
 ```python
@@ -60,27 +81,6 @@ class DatabaseSession(Protocol):
     
     def close(self) -> None:
         """关闭会话"""
-        ...
-```
-
-### 主接口定义
-
-```python
-from typing import Protocol, ContextManager
-
-class DatabaseEngine(Protocol):
-    """数据库引擎抽象接口 (不依赖任何 ORM)"""
-    
-    def session(self) -> ContextManager[DatabaseSession]:
-        """创建数据库会话的上下文管理器
-        
-        Returns:
-            会话上下文管理器,退出时自动提交或回滚
-        """
-        ...
-    
-    def dispose(self) -> None:
-        """释放连接池资源"""
         ...
 ```
 

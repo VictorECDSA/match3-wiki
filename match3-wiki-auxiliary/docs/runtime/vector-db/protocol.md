@@ -22,30 +22,6 @@
 - **混合搜索**: 结合稠密向量和稀疏向量 (Sparse Vector) 的混合检索
 - **RAG 检索**: 为 Retrieval-Augmented Generation 提供文档检索
 
-### 搜索结果 Protocol
-
-```python
-from typing import Protocol, Any
-
-class VectorSearchResult(Protocol):
-    """向量搜索结果 (单条)"""
-    
-    @property
-    def id(self) -> int | str:
-        """文档 ID"""
-        ...
-    
-    @property
-    def distance(self) -> float:
-        """相似度距离"""
-        ...
-    
-    @property
-    def entity(self) -> dict[str, Any]:
-        """实体字段 (如 text、metadata)"""
-        ...
-```
-
 ### 主接口定义
 
 ```python
@@ -131,6 +107,30 @@ class VectorDatabase(Protocol):
     
     def close(self) -> None:
         """关闭连接"""
+        ...
+```
+
+### 搜索结果 Protocol
+
+```python
+from typing import Protocol, Any
+
+class VectorSearchResult(Protocol):
+    """向量搜索结果 (单条)"""
+    
+    @property
+    def id(self) -> int | str:
+        """文档 ID"""
+        ...
+    
+    @property
+    def distance(self) -> float:
+        """相似度距离"""
+        ...
+    
+    @property
+    def entity(self) -> dict[str, Any]:
+        """实体字段 (如 text、metadata)"""
         ...
 ```
 

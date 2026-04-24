@@ -75,7 +75,7 @@ data: [DONE]
 
 ## QAService 会话持久化
 
-`ask()` 核心逻辑见 `030-rag/doc-navigate.md`。`list_sessions()` / `get_session()` 直接委托 `QARepository`（`find_paginated` / `find_by_id`），未找到时抛 `SESSION_NOT_FOUND`。
+`ask()` 核心逻辑见 `030-rag/retrieval/router.md`。`list_sessions()` / `get_session()` 直接委托 `QARepository`（`find_paginated` / `find_by_id`），未找到时抛 `SESSION_NOT_FOUND`。
 
 ---
 

@@ -1,4 +1,4 @@
-# Relational Database Implementation — PostgreSQL + SQLAlchemy
+# Database Implementation — PostgreSQL + SQLAlchemy
 
 ## 概述
 

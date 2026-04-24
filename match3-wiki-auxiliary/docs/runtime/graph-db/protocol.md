@@ -22,20 +22,52 @@
 - **关系查询**: 实体间关系的复杂查询
 - **图算法**: PageRank、社区发现等图算法 (需扩展 Protocol)
 
-### 查询结果 Protocol
+### 主接口定义
+
+```python
+from typing import Protocol, ContextManager
+
+class GraphDatabase(Protocol):
+    """图数据库抽象接口 (不依赖任何图数据库驱动)"""
+    
+    def session(self, database: str | None = None) -> ContextManager[GraphSession]:
+        """创建会话的上下文管理器
+        
+        Args:
+            database: 数据库名称 (可选,默认使用默认数据库)
+            
+        Returns:
+            会话上下文管理器
+        """
+        ...
+    
+    def close(self) -> None:
+        """关闭驱动连接池"""
+        ...
+```
+
+### 会话 Protocol
 
 ```python
 from typing import Protocol, Any
 
-class GraphQueryResult(Protocol):
-    """图查询结果 (单条记录)"""
+class GraphSession(Protocol):
+    """图数据库会话接口"""
     
-    def get(self, key: str, default: Any = None) -> Any:
-        """获取字段值"""
+    def run(
+        self,
+        query: str,
+        parameters: dict[str, Any] | None = None,
+    ) -> list[GraphQueryResult]:
+        """在自动提交模式下执行查询"""
         ...
     
-    def data(self) -> dict[str, Any]:
-        """获取所有字段的字典"""
+    def begin_transaction(self) -> GraphTransaction:
+        """开始显式事务"""
+        ...
+    
+    def close(self) -> None:
+        """关闭会话"""
         ...
 ```
 
@@ -72,52 +104,20 @@ class GraphTransaction(Protocol):
         ...
 ```
 
-### 会话 Protocol
+### 查询结果 Protocol
 
 ```python
-from typing import Protocol, ContextManager, Any
+from typing import Protocol, Any
 
-class GraphSession(Protocol):
-    """图数据库会话接口"""
+class GraphQueryResult(Protocol):
+    """图查询结果 (单条记录)"""
     
-    def run(
-        self,
-        query: str,
-        parameters: dict[str, Any] | None = None,
-    ) -> list[GraphQueryResult]:
-        """在自动提交模式下执行查询"""
+    def get(self, key: str, default: Any = None) -> Any:
+        """获取字段值"""
         ...
     
-    def begin_transaction(self) -> GraphTransaction:
-        """开始显式事务"""
-        ...
-    
-    def close(self) -> None:
-        """关闭会话"""
-        ...
-```
-
-### 主接口定义
-
-```python
-from typing import Protocol, ContextManager
-
-class GraphDatabase(Protocol):
-    """图数据库抽象接口 (不依赖任何图数据库驱动)"""
-    
-    def session(self, database: str | None = None) -> ContextManager[GraphSession]:
-        """创建会话的上下文管理器
-        
-        Args:
-            database: 数据库名称 (可选,默认使用默认数据库)
-            
-        Returns:
-            会话上下文管理器
-        """
-        ...
-    
-    def close(self) -> None:
-        """关闭驱动连接池"""
+    def data(self) -> dict[str, Any]:
+        """获取所有字段的字典"""
         ...
 ```
 

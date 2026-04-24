@@ -36,7 +36,7 @@ RAG 模块分为两条完全独立的流程——**索引流程**（离线，文
     └── LLM 实体抽取 → Neo4j（可选，graph=True 时启用）
 ```
 
-Wiki 页面的索引流程独立，走 OpenKB 五步编译流水线——见 `030-rag/indexing/wiki-compile.md`。
+Wiki 页面的索引流程独立，走 OpenKB 五步编译流水线——见 `030-rag/processing/wiki-compile.md`。
 
 ### 检索流程（在线）
 
@@ -74,8 +74,8 @@ LLM 生成（SSE 流式输出）
 
 | 文件 | 内容 |
 |------|------|
-| `030-rag/indexing/chunking.md` | 文档转 Markdown、切块策略、Parent-Child 索引层、三路建索引 |
-| `030-rag/indexing/wiki-compile.md` | OpenKB 五步 Wiki 编译流水线、WikiCompileService、compile_topic 任务 |
+| `030-rag/processing/chunking.md` | 文档转 Markdown、切块策略、Parent-Child 索引层、三路建索引 |
+| `030-rag/processing/wiki-compile.md` | OpenKB 五步 Wiki 编译流水线、WikiCompileService、compile_topic 任务 |
 
 ### 检索流程
 

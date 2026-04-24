@@ -271,9 +271,9 @@ SSE 端点使用 `StreamingResponse`，不经过 `ApiResp` 包装。分页列表
 4. `040-api/conventions.md` — 实现共享 API 层（含 Match3Exception + 业务码）
 5. `090-error/error-design.md` — 实现报错体系与结构化日志（越早越好，贯穿全程）
 6. `020-ingestion/pipeline.md` — 实现导入流水线
-7. `030-rag/hybrid-search.md` — 实现核心 RAG（大多数查询使用此路径）
-8. `030-rag/wiki-lookup.md` — 实现 Wiki 编译
-9. `030-rag/doc-navigate.md` — 实现 PageIndex 路径
+7. `030-rag/retrieval/hybrid-search.md` — 实现核心 RAG（大多数查询使用此路径）
+8. `030-rag/processing/wiki-compile.md` — 实现 Wiki 编译
+9. `030-rag/retrieval/doc-navigate.md` — 实现 PageIndex 路径
 10. `040-api/qa-api.md` — 接入带 SSE 的 Q&A 端点
 11. `070-rbac/permissions.md` — 添加认证与访问控制
 12. `080-testing/unit-tests.md` — 补充单元测试

@@ -81,7 +81,7 @@ unzip -j base.apk "assets/res_output/bundled/ccsm_levels/*" -d ccsm_levels/
 
 | 路径 | 大小 | 说明 |
 |---|---|---|
-| `docs/candy-crush-saga_levels/all_levels.jsonl` | 37 MB | **主数据文件**，22,205 关完整配置，字段已按字母排序 |
+| `workspace/candy-crush-saga_apk-analysis/all_levels.jsonl` | 37 MB | **主数据文件**，22,205 关完整配置，字段已按字母排序 |
 | `workspace/candy-crush-saga_apk-analysis/base.apk` | 156 MB | 原始 APK（备用） |
 | `workspace/candy-crush-saga_apk-analysis/ccsm_levels/levels_batched.db` | 41 MB | 原始 SQLite（备用） |
 | `workspace/candy-crush-saga_apk-analysis/screen_current.png` | — | 第 11 关截图（验证用） |

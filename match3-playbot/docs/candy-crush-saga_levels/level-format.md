@@ -15,7 +15,7 @@
 | `randomSeed` | int | 随机种子（`0` = 完全随机） |
 | `scoreTargets` | `[int, int, int]` | 一星 / 二星 / 三星 对应分数阈值 |
 | `moveLimit` | int | 最大步数（`0` 表示不限） |
-| `gameModeName` | string | 游戏模式，见[游戏模式](#三游戏模式-gamemodename)表 |
+| `gameModeName` | string | 游戏模式，见[游戏模式](#三游戏模式gamemodename)表 |
 | `tileMap` | `string[][]` | 棋盘布局二维数组，见 [tileMap 编码](#二tilemap-编码) |
 | `levelDefinitionId_meta` | int | 关卡定义唯一 ID |
 | `version_meta` | int | 关卡版本号 |
@@ -28,7 +28,7 @@
 | `boardRows` | 56% | int | 棋盘行数（缺省为 9） |
 | `boardColumns` | 56% | int | 棋盘列数（缺省为 9） |
 | `preferredColors` | 50% | `int[]` | 优先生成的糖果颜色 ID 列表 |
-| `levelType` | 97% | `string[]` | 关卡修饰标签，见[修饰标签](#四关卡修饰标签-leveltype)表 |
+| `levelType` | 97% | `string[]` | 关卡修饰标签，见[修饰标签](#四关卡修饰标签leveltype)表 |
 | `episodeId` | 64% | int | 所属章节 ID |
 | `levelId` | 64% | string | 服务器端关卡 ID |
 | `qa` | 99% | bool | QA 标志，正式关卡均为 `false` |

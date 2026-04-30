@@ -11,3 +11,4 @@ ACT_TAP    = "tap"     # tap a single (x, y)
 ACT_SWAP   = "swap"    # swap two adjacent cells (r1,c1) <-> (r2,c2)
 ACT_WAIT   = "wait"    # do nothing this cycle
 ACT_LAUNCH = "launch"  # re-launch / bring game to foreground
+ACT_SCROLL = "scroll"  # swipe-scroll: tap_x/tap_y=start, tap_x2/tap_y2=end

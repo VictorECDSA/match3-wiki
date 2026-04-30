@@ -26,6 +26,9 @@ class BotContext:
     blacklisted: dict                 = field(default_factory=dict)
     # move -> (color1, color2)
 
+    # Map navigation state
+    map_scroll_count: int             = 0         # how many scrolls done this MAP session
+
     def reset_level(self) -> None:
         """Clear per-level state (called on PRE_PLAY / FAILED)."""
         self.move_count   = 0

@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from core import adb
 from core import board_geometry as geo
 import bot_logger as logger
-from models import Action, ACT_TAP, ACT_SWAP, ACT_WAIT, ACT_LAUNCH
+from models import Action, ACT_TAP, ACT_SWAP, ACT_WAIT, ACT_LAUNCH, ACT_SCROLL
 
 
 _SLEEP_AFTER: dict[str, float] = {
@@ -33,6 +33,7 @@ _SLEEP_AFTER: dict[str, float] = {
     ACT_SWAP:   1.0,
     ACT_WAIT:   1.5,
     ACT_LAUNCH: 3.0,
+    ACT_SCROLL: 1.5,
 }
 
 
@@ -89,6 +90,16 @@ def execute(action: Action, post_sleep: bool = True) -> dict:
         if post_sleep:
             time.sleep(_SLEEP_AFTER[ACT_LAUNCH])
         return {"action_type": at, "ok": True, "detail": "launched game"}
+
+    if at == ACT_SCROLL:
+        x1, y1 = action.tap_x, action.tap_y
+        x2, y2 = action.tap_x2, action.tap_y2
+        logger.log("execute", f"scroll ({x1},{y1})->({x2},{y2}) — {action.reason}")
+        adb.swipe(x1, y1, x2, y2, duration_ms=400)
+        if post_sleep:
+            time.sleep(_SLEEP_AFTER[ACT_SCROLL])
+        return {"action_type": at, "ok": True,
+                "detail": f"scrolled ({x1},{y1})->({x2},{y2})"}
 
     logger.log("execute", f"unknown action_type={at!r}", level="WARN")
     return {"action_type": at, "ok": False, "detail": f"unknown action_type: {at}"}

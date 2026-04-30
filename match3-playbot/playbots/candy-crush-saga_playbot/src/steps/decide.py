@@ -29,7 +29,7 @@ import bot_logger as logger
 from models import (
     GameState, BotContext, Action,
     MAP, PRE_PLAY, PLAYING, COMPLETE, FAILED, UNKNOWN,
-    ACT_TAP, ACT_SWAP, ACT_WAIT, ACT_LAUNCH,
+    ACT_TAP, ACT_SWAP, ACT_WAIT, ACT_LAUNCH, ACT_SCROLL,
 )
 
 _SCREEN_H = 2712
@@ -57,12 +57,33 @@ def decide(state: GameState, ctx: BotContext) -> Action:
         ctx.consecutive_unk = 0
         img = _load_img(state)
         if img is not None:
+            # Check if we need to scroll up to reveal the latest level.
+            # Strategy: if no pink bubble is visible in the top 40% of the
+            # screen, the latest (highest-numbered) level is above the fold.
+            # We scroll up (swipe finger upward) with a large stroke, up to
+            # _MAP_MAX_SCROLLS times before giving up and tapping whatever we see.
+            _MAP_MAX_SCROLLS = 12
+            needs_scroll = uid.needs_map_scroll(img)
+            if needs_scroll and ctx.map_scroll_count < _MAP_MAX_SCROLLS:
+                ctx.map_scroll_count += 1
+                # Swipe upward: finger moves from y=1800 to y=600 (slow, 400ms)
+                action = Action(ACT_SCROLL,
+                                tap_x=610, tap_y=1800,
+                                tap_x2=610, tap_y2=600,
+                                reason=f"map: scroll up to find latest level "
+                                       f"(scroll #{ctx.map_scroll_count})")
+                logger.log_action("decide", action)
+                return action
+
+            # Map is scrolled to the right position — reset scroll counter and tap
+            ctx.map_scroll_count = 0
             tap_pos = uid.find_latest_level_tap(img)
             if tap_pos:
                 action = Action(ACT_TAP, tap_x=tap_pos[0], tap_y=tap_pos[1],
                                 reason="map: tap latest level bubble")
                 logger.log_action("decide", action)
                 return action
+
         action = Action(ACT_WAIT, reason="map: no level bubble found, waiting")
         logger.log_action("decide", action)
         return action

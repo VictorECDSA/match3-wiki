@@ -154,7 +154,7 @@ def _is_playing(screen_bgr: np.ndarray) -> bool:
 
     MIN_CONSECUTIVE_ROWS = 40   # real board spans many rows; globe does not
     ROW_THRESHOLD        = 0.35
-    STRIP_THRESHOLD      = 0.25
+    STRIP_THRESHOLD      = 0.50  # raised: map purple trees reach ~0.55 on narrow strip
 
     region = screen_bgr[200:min(2500, h), :, :]
     hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
@@ -234,17 +234,33 @@ def _is_failed(screen_bgr: np.ndarray) -> bool:
 
 def _is_map(screen_bgr: np.ndarray) -> bool:
     """
-    World map: has a green grass background, no board teal strip, no dialog.
-    Check for large green region in the middle of the screen.
+    World map detection using the winding beige/tan path that runs through
+    the centre of every world-map screen.
+
+    The path has a distinctive warm beige colour (H≈10-40, S≈15-130, V>140)
+    that covers >15% of the screen centre (y=600-1800, x=200-1020).
+    This signal is absent on the gameplay board or any dialog.
+
+    Fallback: also check for the large pink/magenta level-number bubbles
+    (H≈140-175) which are unique to the world map.
     """
-    mid = screen_bgr[600:1800, 0:1220]
+    mid = screen_bgr[600:1800, 200:1020]
     hsv = cv2.cvtColor(mid, cv2.COLOR_BGR2HSV)
-    # Grass green: H≈60-90 (OpenCV), S>40, V>80
-    mask = cv2.inRange(hsv,
-                       np.array([55, 35, 70]),
-                       np.array([95, 255, 255]))
-    green_frac = mask.sum() / (mask.shape[0] * mask.shape[1] * 255)
-    return green_frac > 0.10
+
+    # Beige/tan winding path: H≈10-40, low-medium S, high V
+    beige_mask = cv2.inRange(hsv,
+                              np.array([10, 15, 140]),
+                              np.array([40, 130, 255]))
+    beige_frac = beige_mask.sum() / (mid.shape[0] * mid.shape[1] * 255)
+    if beige_frac > 0.15:
+        return True
+
+    # Pink/magenta level bubbles: H≈140-175, S>80, V>100
+    bubble_mask = cv2.inRange(hsv,
+                               np.array([140, 80, 100]),
+                               np.array([175, 255, 255]))
+    bubble_frac = bubble_mask.sum() / (mid.shape[0] * mid.shape[1] * 255)
+    return bubble_frac > 0.05
 
 
 # ---------------------------------------------------------------------------
@@ -259,8 +275,9 @@ def detect_screen(img: Image.Image) -> str:
       1. PRE_PLAY  - Play! button template found
       2. COMPLETE  - gold banner at top
       3. FAILED    - orange retry button area
-      4. PLAYING   - teal board background strip
-      5. MAP       - green map background
+      4. MAP       - beige path / pink bubbles (checked BEFORE playing to avoid
+                     the map's decorative purple trees triggering _is_playing)
+      5. PLAYING   - teal board background strip
       6. UNKNOWN
     """
     screen_bgr = _pil_to_cv(img)
@@ -279,13 +296,13 @@ def detect_screen(img: Image.Image) -> str:
     if _is_failed(screen_bgr):
         return FAILED
 
-    # 4. Active board
-    if _is_playing(screen_bgr):
-        return PLAYING
-
-    # 5. World map
+    # 4. World map  ← must come BEFORE _is_playing
     if _is_map(screen_bgr):
         return MAP
+
+    # 5. Active board
+    if _is_playing(screen_bgr):
+        return PLAYING
 
     return UNKNOWN
 
@@ -378,26 +395,93 @@ def read_bubble_number(img: Image.Image, cx: int, cy: int, radius: int) -> int |
     return None
 
 
+def find_real_level_bubbles(img: Image.Image) -> list[tuple[int, int, int]]:
+    """
+    Find actual level-number bubbles on the world map.
+
+    Level bubbles are pink/magenta circles (H≈140-175 in OpenCV HSV).
+    Uses HoughCircles then filters by colour to eliminate noise.
+
+    Returns list of (x, y, radius) sorted top-to-bottom (smallest y first =
+    newest level at top of map).
+    """
+    bgr = _pil_to_cv(img)
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+
+    circles = cv2.HoughCircles(
+        gray,
+        cv2.HOUGH_GRADIENT,
+        dp=1.2,
+        minDist=120,
+        param1=80,
+        param2=40,
+        minRadius=45,
+        maxRadius=80,
+    )
+    if circles is None:
+        return []
+
+    result = []
+    h = bgr.shape[0]
+    for x, y, r in circles[0]:
+        x, y, r = int(x), int(y), int(r)
+        # Restrict to map content area (exclude nav bar and title)
+        if not (400 < y < h - 200):
+            continue
+        # Check that the centre patch is pink/magenta
+        py0, py1 = max(0, y - 20), min(h, y + 20)
+        px0, px1 = max(0, x - 20), min(bgr.shape[1], x + 20)
+        patch = bgr[py0:py1, px0:px1]
+        if patch.size == 0:
+            continue
+        hsv_p = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
+        pink_m = cv2.inRange(hsv_p,
+                              np.array([140, 80, 100]),
+                              np.array([175, 255, 255]))
+        pink_frac = pink_m.sum() / (patch.shape[0] * patch.shape[1] * 255)
+        if pink_frac > 0.15:
+            result.append((x, y, r))
+
+    # Sort top-to-bottom (smallest y = newest level at top of scrolled map)
+    result.sort(key=lambda b: b[1])
+    return result
+
+
+def needs_map_scroll(img: Image.Image) -> bool:
+    """
+    Return True if the map needs to be scrolled upward to reveal the latest level.
+
+    The world map scrolls vertically with the newest (highest-numbered) level
+    at the top.  We consider the map "fully scrolled to the top" only when the
+    topmost pink bubble is within the upper 25% of the screen (y < SCREEN_H*0.25).
+    If it is lower than that, there are likely more levels above the fold.
+    """
+    bubbles = find_real_level_bubbles(img)
+    if not bubbles:
+        # No bubbles at all — scroll up to try
+        return True
+    topmost_y = bubbles[0][1]
+    # Scroll until the topmost visible bubble is in the top quarter of the screen
+    return topmost_y > SCREEN_H * 0.25
+
+
 def find_latest_level_tap(img: Image.Image) -> tuple[int, int] | None:
     """
     Find the latest (highest-numbered) accessible level bubble on the map
     and return its (x, y) tap coordinates.
 
-    Strategy:
-      - The character avatar is always standing on the latest unlocked level.
-      - The avatar is identified by scanning for the blue square frame
-        (friend avatar indicator with red exclamation badge) near a bubble.
-      - Fall back to the topmost bubble in the upper-third of the screen.
+    Uses pink-filtered real level bubbles.  The topmost bubble (smallest y)
+    on the scrolled-to-top map is the latest/newest level.
+    Falls back to finding the bubble nearest the character avatar.
     """
     bgr = _pil_to_cv(img)
 
-    # Look for the blue-bordered character frame (roughly 90x90 px blue square)
+    # Try to locate the character avatar (stands on current level)
+    # Avatar has a blue portrait frame (H≈95-130, S>70, V>70)
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-    # Blue frame: H≈100-125, S>80, V>80
     blue_mask = cv2.inRange(hsv,
                              np.array([95, 70, 70]),
                              np.array([130, 255, 255]))
-    # Find largest blue contour
     contours, _ = cv2.findContours(blue_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     best_contour = None
     best_area = 0
@@ -407,29 +491,19 @@ def find_latest_level_tap(img: Image.Image) -> tuple[int, int] | None:
             best_area = area
             best_contour = c
 
-    if best_contour is not None:
+    bubbles = find_real_level_bubbles(img)
+
+    if best_contour is not None and bubbles:
         M = cv2.moments(best_contour)
         if M["m00"] > 0:
             avatar_x = int(M["m10"] / M["m00"])
             avatar_y = int(M["m01"] / M["m00"])
+            closest = min(bubbles,
+                          key=lambda b: (b[0] - avatar_x) ** 2 + (b[1] - avatar_y) ** 2)
+            return closest[0], closest[1]
 
-            # The current level bubble is the dark-purple circle nearest to the avatar
-            bubbles = find_level_bubbles(img)
-            if bubbles:
-                closest = min(bubbles,
-                              key=lambda b: (b[0] - avatar_x) ** 2 + (b[1] - avatar_y) ** 2)
-                return closest[0], closest[1]
-
-    # Fallback: pick the topmost bubble in the top third of the screen
-    # (topmost = latest level since map scrolls with newest at top)
-    bubbles = find_level_bubbles(img)
+    # Fallback: topmost pink bubble (newest level when scrolled to top)
     if bubbles:
-        top_third = [b for b in bubbles if b[1] < SCREEN_H // 3]
-        if top_third:
-            best = min(top_third, key=lambda b: b[1])
-            return best[0], best[1]
-        # If no bubble in top third, take the one with smallest y
-        best = min(bubbles, key=lambda b: b[1])
-        return best[0], best[1]
+        return bubbles[0][0], bubbles[0][1]
 
     return None

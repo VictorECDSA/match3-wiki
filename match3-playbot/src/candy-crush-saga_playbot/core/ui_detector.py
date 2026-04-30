@@ -13,14 +13,11 @@ Screen states:
   UNKNOWN     - none of the above (loading, transition, popup)
 """
 
-import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
 from PIL import Image
-
-sys.path.insert(0, str(Path(__file__).parent))
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -29,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 SCREEN_W = 1220
 SCREEN_H = 2712
 
-TEMPLATES_DIR = Path(__file__).parent / "templates"
+TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 # Screen state strings
 MAP      = "map"
@@ -144,11 +141,13 @@ def _is_playing(screen_bgr: np.ndarray) -> bool:
     if row_sums.max() > 0.35:
         return True
     # Right-strip check: side-panel overlays leave the right ~250 px uncovered.
-    # If any row in that strip exceeds 15 % we still count it as PLAYING.
+    # If any row in that strip exceeds 25 % we still count it as PLAYING.
+    # (threshold is higher than full-width check to avoid false positives from
+    # the pink border on the level-failed dialog which only covers right edge rows)
     right_strip = mask[:, 900:]
     if right_strip.shape[1] > 0:
         right_sums = right_strip.sum(axis=1) / (right_strip.shape[1] * 255.0)
-        if right_sums.max() > 0.15:
+        if right_sums.max() > 0.25:
             return True
     return False
 
@@ -171,17 +170,25 @@ def _is_complete(screen_bgr: np.ndarray) -> bool:
 
 def _is_failed(screen_bgr: np.ndarray) -> bool:
     """
-    Level-failed screen has a large dark overlay + a reddish/orange retry button.
-    Check for prominent orange in the centre of the screen.
+    Level-failed screen: check for the Retry button in the lower-middle area.
+    The button is hot-pink/magenta (H≈140-175) on some device themes, or
+    orange (H≈8-24) on others.  Accept either.
     """
-    mid = screen_bgr[1600:1900, 200:1020]
+    mid = screen_bgr[1600:1950, 200:1020]
     hsv = cv2.cvtColor(mid, cv2.COLOR_BGR2HSV)
-    # Orange: H≈10-22, S>140, V>140
-    mask = cv2.inRange(hsv,
-                       np.array([8, 120, 120]),
-                       np.array([24, 255, 255]))
-    orange_frac = mask.sum() / (mask.shape[0] * mask.shape[1] * 255)
-    return orange_frac > 0.12
+    # Orange retry button: H≈8-24, S>120, V>120
+    mask_orange = cv2.inRange(hsv,
+                               np.array([8, 120, 120]),
+                               np.array([24, 255, 255]))
+    orange_frac = mask_orange.sum() / (mid.shape[0] * mid.shape[1] * 255)
+    if orange_frac > 0.12:
+        return True
+    # Hot-pink / magenta retry button: H≈140-175, S>80, V>100
+    mask_pink = cv2.inRange(hsv,
+                             np.array([140, 80, 100]),
+                             np.array([175, 255, 255]))
+    pink_frac = mask_pink.sum() / (mid.shape[0] * mid.shape[1] * 255)
+    return pink_frac > 0.12
 
 
 # ---------------------------------------------------------------------------

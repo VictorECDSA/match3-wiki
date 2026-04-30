@@ -13,7 +13,7 @@ SCREEN_W = 1220
 SCREEN_H = 2712
 
 # All intermediate files go here
-WORKSPACE = Path(__file__).parent.parent.parent / "workspace" / "candy-crush-saga_playbot"
+WORKSPACE = Path(__file__).parent.parent.parent.parent / "workspace" / "candy-crush-saga_playbot"
 SCREENSHOT_DIR = WORKSPACE / "screenshots"
 SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -55,6 +55,12 @@ def swipe(x1: int, y1: int, x2: int, y2: int, duration_ms: int = 150):
 def keyevent(key: str):
     """Send a keyevent (e.g. 'KEYCODE_BACK')."""
     _adb("shell", "input", "keyevent", key)
+
+
+def launch_game():
+    """Bring Candy Crush Saga to the foreground (re-launch if needed)."""
+    _adb("shell", "monkey", "-p", "com.king.candycrushsaga",
+         "-c", "android.intent.category.LAUNCHER", "1")
 
 
 def current_activity() -> str:

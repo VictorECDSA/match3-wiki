@@ -3,15 +3,11 @@ Board state parser for Candy Crush Saga.
 Takes a PIL screenshot and returns the 9x9 grid of candy colors.
 """
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent))
-
 import numpy as np
 from PIL import Image, ImageDraw
 
-import board_geometry as geo
-import color_classifier as cc
+from . import board_geometry as geo
+from . import color_classifier as cc
 
 
 def parse_board(img: Image.Image) -> list[list[str]]:

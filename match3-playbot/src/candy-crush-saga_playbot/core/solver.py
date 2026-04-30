@@ -4,11 +4,7 @@ Given a board state and the level's tileMap, finds all valid swaps
 that create matches of 3+ candies and scores them.
 """
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent))
-
-import color_classifier as cc
+from . import color_classifier as cc
 
 # Colors that are "empty" or unmovable (obstacles / background)
 _UNMOVABLE = {cc.EMPTY, cc.WHITE, cc.DARK, cc.UNKNOWN}

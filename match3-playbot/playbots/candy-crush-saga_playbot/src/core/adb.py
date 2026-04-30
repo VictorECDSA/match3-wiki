@@ -13,7 +13,7 @@ SCREEN_W = 1220
 SCREEN_H = 2712
 
 # All intermediate files go here
-WORKSPACE = Path(__file__).parent.parent.parent.parent / "workspace" / "candy-crush-saga_playbot"
+WORKSPACE = Path(__file__).parent.parent.parent / "workspace"
 SCREENSHOT_DIR = WORKSPACE / "screenshots"
 SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 

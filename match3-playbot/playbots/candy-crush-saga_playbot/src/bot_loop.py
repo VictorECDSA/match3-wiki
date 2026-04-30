@@ -60,7 +60,7 @@ def run_bot(max_moves_per_level: int, delay: float, verbose: bool) -> None:
                 from PIL import Image
                 if state.screenshot_path and state.screenshot_path.exists():
                     img = Image.open(state.screenshot_path)
-                    import adb
+                    from core import adb
                     ann = bp.annotate_board(img, state.board)
                     ann.save(adb.SCREENSHOT_DIR / f"annotated_{int(time.time())}.png")
             except Exception as e:

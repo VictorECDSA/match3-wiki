@@ -10,7 +10,7 @@
 set -euo pipefail
 
 ENV_NAME="candy-crush-saga_playbot"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/src" && pwd)"
 
 # Locate conda
 CONDA_BASE="$(conda info --base 2>/dev/null || echo "/opt/miniconda3")"

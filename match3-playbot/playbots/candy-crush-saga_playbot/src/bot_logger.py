@@ -2,7 +2,7 @@
 Structured JSON-line logger for the Candy Crush Saga bot.
 
 Each log entry is a single line of JSON written to:
-  workspace/candy-crush-saga_playbot/bot.log
+  candy-crush-saga_playbot/workspace/bot.log
 
 Format:
   {"ts": <unix_float>, "step": "<capture|decide|execute|loop>",
@@ -24,11 +24,7 @@ from pathlib import Path
 # Log file location
 # ---------------------------------------------------------------------------
 
-_WORKSPACE = (
-    Path(__file__).parent.parent.parent
-    / "workspace"
-    / "candy-crush-saga_playbot"
-)
+_WORKSPACE = Path(__file__).parent.parent / "workspace"
 _WORKSPACE.mkdir(parents=True, exist_ok=True)
 
 LOG_FILE = _WORKSPACE / "bot.log"

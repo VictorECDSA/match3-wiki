@@ -26,7 +26,7 @@ from PIL import Image
 SCREEN_W = 1220
 SCREEN_H = 2712
 
-TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
 
 # Screen state strings
 MAP      = "map"
@@ -117,38 +117,75 @@ def _is_playing(screen_bgr: np.ndarray) -> bool:
     """
     Check whether the active gameplay board is visible.
 
-    Different levels use different board background themes (e.g. cyan teal for
-    early levels, dark olive-green for later levels).  We cover all themes by
-    using a broad hue range (H=75-130, covering teal through dark green) and
-    scanning the full game area (y=200-2500) row-by-row.  If any row exceeds
-    35 % coverage, the board background is on-screen.  The world map grass
-    (H≈73-74) falls below this threshold.
+    The board background spans many rows continuously (teal/cyan-green/dark
+    olive, H=75-130).  A title-screen globe or small decorative element may
+    trigger one or two high-coverage rows but NOT a long consecutive run.
 
-    Side-panel overlays (e.g. the device's "game centre" panel) slide in from
-    the left and cover roughly x=0-1000.  To remain robust we also check the
-    right-side strip (x=900-1220) with a lower threshold (15 %), so a partially
-    obscured board is still recognised as PLAYING.
+    We require at least MIN_CONSECUTIVE_ROWS rows in a row that each exceed
+    ROW_THRESHOLD coverage — this rejects the title-screen globe (which
+    triggers only a handful of rows) while accepting the real board (which
+    spans ~600+ px / hundreds of rows).
+
+    Side-panel overlays are handled by also checking the right-side strip
+    (x=900-1220) with a slightly lower threshold.
+
+    Guard: if the bottom navigation bar is present (white/cream bar at
+    y=2550-2700, unique to the world-map screen), return False immediately.
+    This prevents the map's green grass from being misidentified as the board.
     """
     h = screen_bgr.shape[0]
+
+    # --- Map navigation-bar guard -------------------------------------------
+    # The world-map screen has a white/cream bottom nav bar (~y=2550-2700).
+    # During actual gameplay this region is dark (part of the board/UI).
+    # A high fraction of near-white pixels means we are on the map, not playing.
+    nav_y0 = min(2550, h - 10)
+    nav_y1 = min(2700, h)
+    if nav_y1 > nav_y0:
+        bottom = screen_bgr[nav_y0:nav_y1, 100:1120]
+        hsv_bottom = cv2.cvtColor(bottom, cv2.COLOR_BGR2HSV)
+        nav_mask = cv2.inRange(hsv_bottom,
+                               np.array([0,   0, 180]),
+                               np.array([180, 60, 255]))
+        nav_frac = nav_mask.sum() / (nav_mask.shape[0] * nav_mask.shape[1] * 255)
+        if nav_frac > 0.25:
+            return False
+    # ------------------------------------------------------------------------
+
+    MIN_CONSECUTIVE_ROWS = 40   # real board spans many rows; globe does not
+    ROW_THRESHOLD        = 0.35
+    STRIP_THRESHOLD      = 0.25
+
     region = screen_bgr[200:min(2500, h), :, :]
     hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
-    # Broad game-board color range: teal / cyan-green / dark olive
     mask = cv2.inRange(hsv,
                        np.array([75, 50, 60]),
                        np.array([130, 255, 255]))
-    # Full-width check: any row exceeds 35 % coverage
+
+    # Full-width consecutive-row check
     row_sums = mask.sum(axis=1) / (mask.shape[1] * 255.0)
-    if row_sums.max() > 0.35:
-        return True
-    # Right-strip check: side-panel overlays leave the right ~250 px uncovered.
-    # If any row in that strip exceeds 25 % we still count it as PLAYING.
-    # (threshold is higher than full-width check to avoid false positives from
-    # the pink border on the level-failed dialog which only covers right edge rows)
+    consecutive = 0
+    for v in row_sums:
+        if v > ROW_THRESHOLD:
+            consecutive += 1
+            if consecutive >= MIN_CONSECUTIVE_ROWS:
+                return True
+        else:
+            consecutive = 0
+
+    # Right-strip consecutive-row check (handles side-panel overlays)
     right_strip = mask[:, 900:]
     if right_strip.shape[1] > 0:
         right_sums = right_strip.sum(axis=1) / (right_strip.shape[1] * 255.0)
-        if right_sums.max() > 0.25:
-            return True
+        consecutive = 0
+        for v in right_sums:
+            if v > STRIP_THRESHOLD:
+                consecutive += 1
+                if consecutive >= MIN_CONSECUTIVE_ROWS:
+                    return True
+            else:
+                consecutive = 0
+
     return False
 
 
@@ -228,8 +265,10 @@ def detect_screen(img: Image.Image) -> str:
     """
     screen_bgr = _pil_to_cv(img)
 
-    # 1. Pre-play dialog: look for Play! button template
+    # 1. Pre-play: level-entry "Play!" button OR title-screen "Play" button
     if find_template(img, "btn_play.png", threshold=0.75) is not None:
+        return PRE_PLAY
+    if find_template(img, "btn_play_title.png", threshold=0.70) is not None:
         return PRE_PLAY
 
     # 2. Level complete
@@ -256,8 +295,11 @@ def detect_screen(img: Image.Image) -> str:
 # ---------------------------------------------------------------------------
 
 def find_play_button(img: Image.Image) -> tuple[int, int] | None:
-    """Return (x, y) centre of the Play! button, or None if not found."""
+    """Return (x, y) centre of the Play button (level-entry or title screen)."""
     match = find_template(img, "btn_play.png", threshold=0.75)
+    if match:
+        return match[0], match[1]
+    match = find_template(img, "btn_play_title.png", threshold=0.70)
     if match:
         return match[0], match[1]
     return None
